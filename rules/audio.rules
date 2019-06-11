@@ -1,0 +1,12 @@
+rule "Echo Dot plays what its told"
+when
+  Item  AudioEchoSelection received command
+then
+  if (receivedCommand == "OFF") {
+    RyanSOfficeDot_Player.sendCommand("Stop")
+  }
+  else {
+    RyansOfficeDot_MusicProvider.sendCommand("AMAZON_MUSIC")
+    RyanSOfficeDot_MusicVoiceCommand.sendCommand(receivedCommand)
+  }
+end

@@ -1,0 +1,72 @@
+rule "Lighting Scene Morning Lights"
+when
+   Item Scene_MorningLights received command ON
+then
+   SofaTableLamps_Dimmer.sendCommand(30)
+   FloorLamps_Dimmer.sendCommand(OFF)
+   MantleLight_Switch.sendCommand(OFF)
+   CouchLamps_Dimmer.sendCommand(40)
+   CurioCabinet_Dimmer.sendCommand(30)
+
+   CoffeeLight_Switch.sendCommand(ON)
+
+   Scene_MorningLights.sendCommand(OFF)
+end
+   
+
+rule "Lighting Scene Evening Lights"
+when
+   Item Scene_EveningLights received command ON
+then
+   SofaTableLamps_Dimmer.sendCommand(100)
+   FloorLamps_Dimmer.sendCommand(100)
+   MantleLight_Switch.sendCommand(ON)
+   CouchLamps_Dimmer.sendCommand(100)
+   CurioCabinet_Dimmer.sendCommand(70)
+
+   Scene_EveningLights.sendCommand(OFF)
+end
+
+
+   
+rule "Lighting Scene Movie Lights"
+when
+   Item Scene_MovieLights received command ON
+then
+   SofaTableLamps_Dimmer.sendCommand(16)
+   FloorLamps_Dimmer.sendCommand(OFF)
+   MantleLight_Switch.sendCommand(OFF)
+   CouchLamps_Dimmer.sendCommand(OFF)
+   CurioCabinet_Dimmer.sendCommand(10)
+
+   DiningroomLights_Dimmer.sendCommand(15)
+
+   Scene_MovieLights.sendCommand(OFF)
+ end
+
+rule "Lighting Scene Night Lights"
+when
+   Item Scene_NightLights received command ON
+then
+   SofaTableLamps_Dimmer.sendCommand(OFF)
+   FloorLamps_Dimmer.sendCommand(OFF)
+   MantleLight_Switch.sendCommand(OFF)
+   CouchLamps_Dimmer.sendCommand(OFF)
+   CurioCabinet_Dimmer.sendCommand(OFF)
+
+   DiningroomLights_Dimmer.sendCommand(OFF)
+
+   gAllLights.sendCommand(OFF)
+
+   Scene_NightLights.sendCommand(OFF)
+ end
+   
+
+rule "Lighting Scene All Lights Off"
+when
+   Item Scene_AllOff received command ON
+then
+   gAllLights.sendCommand(OFF)
+   gAutoOff.sendCommand(OFF)
+   Scene_AllOff.sendCommand(OFF)
+end

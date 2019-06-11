@@ -1,0 +1,18 @@
+Strategies {
+        everyHour : "0 0 * * * ?"
+        everyDay  : "0 0 0 * * ?"
+
+        // if no strategy is specified for an Item entry below, the default list will be used
+       default = everyChange
+}
+
+Items {
+	gAllLights* : strategy = everyChange, restoreOnStartup
+	gAllBlinds* : strategy = everyChange, restoreOnStartup
+	gAutoOff*   : strategy = everyChange, restoreOnStartup
+	gVolume*    : strategy = everyChange, restoreOnStartup
+	gAudio*     : strategy = everyChange, restoreOnStartup
+
+	Weather*    : strategy = everyHour, restoreOnStartup
+
+}

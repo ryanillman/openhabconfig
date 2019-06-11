@@ -1,0 +1,29 @@
+Group LightingScenes
+Switch Scene_EveningLights "Evening Lights" (LightingScenes) [ "Switchable" ]
+Switch Scene_MorningLights "Morning Lights" (LightingScenes) [ "Switchable" ]
+Switch Scene_NightLights   "Night Lights"   (LightingScenes) [ "Switchable" ]
+Switch Scene_MovieLights   "Movie Lights"   (LightingScenes) [ "Switchable" ]
+Switch Scene_AllOn         "All Lights On"  (LightingScenes) [ "Switchable" ]
+Switch Scene_AllOff        "All Lights Off" (LightingScenes) [ "Switchable" ]
+
+
+
+Group gLivingroomBlinds
+Group gNookBlinds
+Group gUpstairsBlinds
+Group gBedroomBlinds
+Group gAllBlinds
+
+
+Group:Switch:OR(ON,OFF) gAllLights
+
+
+Group GlobalStates
+String State_isNight "Is Night"
+Switch State_SomeoneHome "Someone is Home" 
+
+
+
+
+Number WindSpeedMph        "Windspeed [%.0f mph]"  <windspeed>      (Weather) { channel="openweathermap:weather-and-forecast:f16b7484:local:current#wind-speed" }
+Number AtmoPressureInHg    "Pressure [%.2f inHg]"  <pressure>       (Weather) { channel="openweathermap:weather-and-forecast:f16b7484:local:current#pressure" }

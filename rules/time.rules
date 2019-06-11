@@ -1,0 +1,148 @@
+var Timer  blindUpTimer
+var Timer  ryanAlarmTimer
+var Number ryanAlarmTarget = 40
+var Number ryanAlarmStep   = 1
+
+
+rule "Blinds open"
+when
+  Channel "astro:sun:local:rise#event" triggered END
+then
+  if (blindUpTimer !== null && ! blindUpTimer.hasTerminated()) {
+    blindUpTimer.cancel();
+  }
+
+  var int cloudiness =((LocalWeatherAndForecast_Current_Cloudiness.state as Number).intValue)
+
+  logInfo("Blinds Open", "Sunrise Ended, delaying " + cloudiness + " minutes for it to be bright out")
+
+  blindUpTimer = createTimer(now.plusMinutes(cloudiness), [ |
+    LRBlindL_Rollershutter.sendCommand(UP)
+    LRBlindC_Rollershutter.sendCommand(UP)
+    LRBlindR_Rollershutter.sendCommand(UP)
+
+    BlindNookR_Rollershutter.sendCommand(UP)
+    BlindNookL_Rollershutter.sendCommand(UP)
+  
+    BedroomBlinds_Rollershutter.sendCommand(UP)
+  ])
+end
+
+
+rule "Ryan's Alarm On"
+when
+  Time cron "0 0 5 ? * MON-FRI"
+then
+  if (ryanAlarmTimer !== null && !ryanAlarmTimer.hasTerminated()) {
+    ryanAlarmTimer.cancel()
+  }
+
+  ryanAlarmTimer = createTimer(now, [ |
+     if ((RyansLamp_Dimmer.state as Number) >= ryanAlarmTarget) {
+       return;
+     }
+     else {
+       RyansLamp_Dimmer.sendCommand((RyansLamp_Dimmer.state as Number) + ryanAlarmStep)
+       ryanAlarmTimer.reschedule(now.plusMinutes(1))
+     }
+  ])
+end
+
+
+rule "Ryans Alarm Off"
+when
+  Time cron "0 30 7 ? * *"
+then
+  RyansLamp_Dimmer.sendCommand(OFF)
+end
+
+
+rule "Cancel Ryans Alarm if overridden"
+when
+  Item RyansLamp_Dimmer received command OFF
+then
+  ryanAlarmTimer.cancel()
+end
+
+
+
+rule "Morning Lights on"
+when
+  Time cron "0 0 6 ? * MON-FRI" or
+  Time cron "0 30 7 ? * SAT,SUN"
+then
+  Scene_MorningLights.sendCommand(ON)
+  State_isNight.sendCommand(OFF)
+end
+
+
+
+rule "Drinking Time"
+when
+  Time cron "0 0 12 ? * * " 
+then
+  if (CoffeeLight_Switch.state == ON) { 
+     CoffeeLight_Switch.sendCommand(OFF)
+     BarLights_Dimmer.sendCommand(ON)
+  }  
+end
+
+
+
+
+rule "Evening Lights on"
+when
+  //TODO: this should be by indoor/outdoor luminance, with some sort of check that
+  //the TV isn't playing a show, which we'll need a FireTV Cube for
+  Time cron "0 0 16 ? * * "
+then
+  Scene_EveningLights.sendCommand(ON)
+end
+
+
+rule "Blinds close cloudy day"
+when
+  //TODO: this should be a luminance thing...
+  Channel "astro:sun:local:set#event" triggered START or
+  Time cron "0 0 19 ? * * " 
+then
+  var int cloudiness =(LocalWeatherAndForecast_Current_Cloudiness.state as Number).intValue
+
+  if (cloudiness >= 50) {
+    LRBlindL_Rollershutter.sendCommand(DOWN)
+    LRBlindC_Rollershutter.sendCommand(DOWN)
+    LRBlindR_Rollershutter.sendCommand(DOWN)
+
+    BlindNookL_Rollershutter.sendCommand(DOWN)
+    BlindNookR_Rollershutter.sendCommand(DOWN)
+
+    BedroomBlinds_Rollershutter.sendCommand(DOWN)
+  }
+end
+
+
+rule "Blinds close sunny day"
+when
+  Channel "astro:sun:local:set#event" triggered START or
+  Time cron "0 0 21 ? * * " 
+then
+  LRBlindL_Rollershutter.sendCommand(DOWN)
+  LRBlindC_Rollershutter.sendCommand(DOWN)
+  LRBlindR_Rollershutter.sendCommand(DOWN)
+
+  BlindNookL_Rollershutter.sendCommand(DOWN)
+  BlindNookR_Rollershutter.sendCommand(DOWN)
+
+  BedroomBlinds_Rollershutter.sendCommand(DOWN)
+end
+  
+
+
+rule "Nighttime"
+when
+  Time cron "0 0 22 ? * MON,TUE,WED,THU,FRI *" or
+  Time cron "0 59 23 ? * SAT,SUN *"
+then
+  Scene_AllOff.sendCommand(ON)
+  State_isNight.sendCommand(ON)
+end
