@@ -15,5 +15,5 @@ Number CaitOffice_Volume "Cait's Office Volume"  (gAudio, gVolume)
 String AudioDisributionPreset  "Audio Distribution Preset" (gAudio)
 String AudioEchoSelection      "Echo Music Selection"      (gAudio)
 
-
+String AudioAnnouncement       "Audio Announcement Selection" (gAudio)
 

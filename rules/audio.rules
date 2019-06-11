@@ -10,3 +10,46 @@ then
     RyanSOfficeDot_MusicVoiceCommand.sendCommand(receivedCommand)
   }
 end
+
+
+
+rule "Annouce Things"
+when
+  Item AudioAnnouncement received command
+then
+
+  switch receivedCommand {
+
+    case "dinner_ready": {
+      playSound("dinner_chime.mp3")
+      createTimer(now.plusSeconds(7), [ | 
+        say("Dinner is Served")      
+      ])
+    }
+
+    case "dinner_in_5": {
+      say("Attention: Dinner will be ready shortly. Please wash up.")
+    }  
+
+
+    case "door_front": {
+      playSound("doorbell.mp3")
+      createTimer(now.plusSeconds(2), [ | 
+        say("Someone is at the front door")      
+      ])
+    }
+
+
+    case "door_side": {
+      playSound("doorbell.mp3")
+      createTimer(now.plusSeconds(2), [ | 
+        say("Someone is at the side door")      
+      ])
+    }
+
+
+    default: {
+      say("Attention: " + receivedCommand)
+    }
+  }
+end
