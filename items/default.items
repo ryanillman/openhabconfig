@@ -18,10 +18,8 @@ Group gAllBlinds
 Group:Switch:OR(ON,OFF) gAllLights
 
 
-Group GlobalStates
-String State_isNight "Is Night"
-Switch State_SomeoneHome "Someone is Home" 
-
+Group gGlobalStates
+String State_isNight "Is Night" (gGlobalStates)
 
 
 
