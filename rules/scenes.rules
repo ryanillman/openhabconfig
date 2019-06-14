@@ -56,7 +56,12 @@ then
 
    DiningroomLights_Dimmer.sendCommand(OFF)
 
+   BarLights_Dimmer.sendCommand(OFF)
+
+   KitchenSinkLights.sendCommand(OFF)
+
    gAllLights.sendCommand(OFF)
+   gAutoOff.sendCommand(OFF)
 
    Scene_NightLights.sendCommand(OFF)
  end
