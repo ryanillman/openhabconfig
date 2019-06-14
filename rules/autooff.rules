@@ -1,0 +1,15 @@
+var heaterTimer = null
+var heaterTimerTime = 60
+
+rule "Bathroom heater auto off"
+when
+   Item BathroomHeater_Switch received command ON
+then
+   if (null !== heaterTimer && !heaterTimer.hasTerminated()) {
+      heaterTimer.cancel()
+   }
+
+   heaterTimer = createTimer(now.plusMinutes(heaterTimerTime), [ |
+      BathroomHeater_Switch.sendCommand(OFF)
+   ])
+end
