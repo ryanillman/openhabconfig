@@ -1,0 +1,3 @@
+Thing network:pingdevice:ryans_phone "Ryan's Phone" [ hostname="ryans-phone" ]
+Thing network:pingdevice:caits_phone "Cait's Phone" [ hostname="galaxy-s9" ]
+

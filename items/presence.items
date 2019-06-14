@@ -1,0 +1,17 @@
+Group gPresence
+
+Group:Switch:OR(ON, OFF)  SomeonePresent (gPresence)
+Group:Switch:AND(ON, OFF) EveryonePresent (gPresence)
+
+
+Group:Switch:OR(ON,OFF) RyanPresent (SomeonePresent, EvereyonePresent)
+
+Switch RyanInOwntracksRegion_Home "Ryans Phone is Home" <location> (RyanPresent) { mqttitude="mosquito:owntracks/ryansphone/event:home"}
+
+
+Group:Switch:OR(ON,OFF) CaitPresent (SomeonePresent, EveryonePresent)
+
+Switch CaitInOwntracksRegion_Home "Caits Phone is Home" <location> (CaitPresent) { mqttitude="mosquito:owntracks/caitsphone/event:home"}
+
+
+
