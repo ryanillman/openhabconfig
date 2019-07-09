@@ -33,13 +33,15 @@ rule "Lighting Scene Movie Lights"
 when
    Item Scene_MovieLights received command ON
 then
-   SofaTableLamps_Dimmer.sendCommand(16)
+   SofaTableLamps_Dimmer.sendCommand(20)
    FloorLamps_Dimmer.sendCommand(OFF)
    MantleLight_Switch.sendCommand(OFF)
    CouchLamps_Dimmer.sendCommand(OFF)
    CurioCabinet_Dimmer.sendCommand(10)
 
-   DiningroomLights_Dimmer.sendCommand(15)
+   if (DiningroomLights_Dimmer.state as Number > 20) {
+      DiningroomLights_Dimmer.sendCommand(15)
+   }
 
    Scene_MovieLights.sendCommand(OFF)
  end
@@ -60,6 +62,10 @@ then
 
    KitchenSinkLights.sendCommand(OFF)
 
+   RyansDeskLamp_Dimmer.sendCommand(OFF)
+   zwave_device_a8f41af1_node7_switch_dimmer.sendCommand(OFF)
+
+
    gAllLights.sendCommand(OFF)
    gAutoOff.sendCommand(OFF)
 
@@ -73,5 +79,13 @@ when
 then
    gAllLights.sendCommand(OFF)
    gAutoOff.sendCommand(OFF)
+
+   CurioCabinet_Dimmer.sendCommand(OFF)
+
+   BarLights_Dimmer.sendCommand(OFF)
+
+   RyansDeskLamp_Dimmer.sendCommand(OFF)
+   zwave_device_a8f41af1_node7_switch_dimmer.sendCommand(OFF)
+
    Scene_AllOff.sendCommand(OFF)
 end

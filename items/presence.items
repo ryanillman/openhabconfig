@@ -6,12 +6,12 @@ Group:Switch:AND(ON, OFF) EveryonePresent (gPresence)
 
 Group:Switch:OR(ON,OFF) RyanPresent (SomeonePresent, EvereyonePresent)
 
-Switch RyanInOwntracksRegion_Home "Ryans Phone is Home" <location> (RyanPresent) { mqttitude="mosquito:owntracks/ryansphone/event:home"}
+Switch RyanInOwntracksRegion_Home "Ryans Phone is Home" <location> (RyanPresent) { channel="mqtt:topic:223026e8:Owntracks_Ryan_Home"}
 
 
 Group:Switch:OR(ON,OFF) CaitPresent (SomeonePresent, EveryonePresent)
 
-Switch CaitInOwntracksRegion_Home "Caits Phone is Home" <location> (CaitPresent) { mqttitude="mosquito:owntracks/caitsphone/event:home"}
+Switch CaitInOwntracksRegion_Home "Caits Phone is Home" <location> (CaitPresent) { channel="mqtt:topic:223026e8:Owntracks_Cait_home"}
 
 
 

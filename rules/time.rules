@@ -37,21 +37,24 @@ then
     ryanAlarmTimer.cancel()
   }
 
-  ryanAlarmTimer = createTimer(now, [ |
-     if ((RyansLamp_Dimmer.state as Number) >= ryanAlarmTarget) {
-       return;
-     }
-     else {
-       RyansLamp_Dimmer.sendCommand((RyansLamp_Dimmer.state as Number) + ryanAlarmStep)
-       ryanAlarmTimer.reschedule(now.plusMinutes(1))
-     }
-  ])
+  if (RyanPresent.state == ON) {
+    ryanAlarmTimer = createTimer(now, [ |
+       if ((RyansLamp_Dimmer.state as Number) >= ryanAlarmTarget) {
+         return;
+       }
+       else {
+         RyansLamp_Dimmer.sendCommand((RyansLamp_Dimmer.state as Number) + ryanAlarmStep)
+         ryanAlarmTimer.reschedule(now.plusMinutes(1))
+       }
+    ])
+  }
 end
 
 
 rule "Ryans Alarm Off"
 when
-  Time cron "0 30 7 ? * *"
+  Time cron "0 30 7 ? * *" or
+  Item RyanPresent changed to OFF
 then
   RyansLamp_Dimmer.sendCommand(OFF)
 end
@@ -73,6 +76,9 @@ when
 then
   Scene_MorningLights.sendCommand(ON)
   State_isNight.sendCommand(OFF)
+
+  RyansDeskLamp_Dimmer.sendCommand(ON)
+  zwave_device_a8f41af1_node7_switch_dimmer.sendCommand(ON)
 end
 
 
@@ -140,9 +146,30 @@ end
 
 rule "Nighttime"
 when
-  Time cron "0 0 22 ? * MON,TUE,WED,THU,FRI *" or
-  Time cron "0 59 23 ? * SAT,SUN *"
+  Time cron "0 30 22 ? * MON,TUE,WED,THU,SUN *" or
+  Time cron "0 59 23 ? * FRI,SAT *"
 then
   Scene_AllOff.sendCommand(ON)
   State_isNight.sendCommand(ON)
+end
+
+
+
+
+
+rule "Auto Deck Lights"
+when
+  Item LocalSun_Position_Elevation changed
+then
+  var int cloudiness =(LocalWeatherAndForecast_Current_Cloudiness.state as Number).intValue
+  var int temperature = (LocalWeatherAndForecast_Current_OutdoorTemperature.state as Number).intValue
+  var int elevation = (LocalSun_Position_Elevation.state as Number).intValue
+
+  //the cloudier it is, the earlier the lights should turn on
+  var int topElevation = 15 + ( 20 * (cloudiness / 100))
+
+  //68 is a rough guess of when we'd likely be outside
+  if (elevation < topElevation && elevation > 0 && temperature > 68) {
+    DeckLights_Switch.sendCommand(ON)
+  }
 end

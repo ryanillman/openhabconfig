@@ -1,4 +1,4 @@
-var heaterTimer = null
+var Timer heaterTimer = null
 var heaterTimerTime = 60
 
 rule "Bathroom heater auto off"
@@ -11,5 +11,6 @@ then
 
    heaterTimer = createTimer(now.plusMinutes(heaterTimerTime), [ |
       BathroomHeater_Switch.sendCommand(OFF)
+      heaterTimer = null
    ])
 end
