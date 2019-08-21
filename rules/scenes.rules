@@ -24,6 +24,9 @@ then
    CouchLamps_Dimmer.sendCommand(100)
    CurioCabinet_Dimmer.sendCommand(70)
 
+   KitchenCornerLight_Dimmer.sendCommand(100)
+   KitchenSinkLights_Switch.sendCommand(ON)
+
    Scene_EveningLights.sendCommand(OFF)
 end
 
@@ -36,10 +39,13 @@ then
    SofaTableLamps_Dimmer.sendCommand(20)
    FloorLamps_Dimmer.sendCommand(OFF)
    MantleLight_Switch.sendCommand(OFF)
-   CouchLamps_Dimmer.sendCommand(OFF)
+   CouchLamps_Dimmer.sendCommand(20)
    CurioCabinet_Dimmer.sendCommand(10)
 
+   logInfo("Movie time is triggering, checking diningroom light state: "  + (DiningroomLights_Dimmer.state as Number).toString);
+
    if (DiningroomLights_Dimmer.state as Number > 20) {
+      logInfo("Diningroom Lights were over 20")
       DiningroomLights_Dimmer.sendCommand(15)
    }
 
@@ -60,7 +66,7 @@ then
 
    BarLights_Dimmer.sendCommand(OFF)
 
-   KitchenSinkLights.sendCommand(OFF)
+   KitchenSinkLights_Switch.sendCommand(OFF)
 
    RyansDeskLamp_Dimmer.sendCommand(OFF)
    zwave_device_a8f41af1_node7_switch_dimmer.sendCommand(OFF)
@@ -69,6 +75,7 @@ then
    gAllLights.sendCommand(OFF)
    gAutoOff.sendCommand(OFF)
 
+   State_isNight.sendCommand(ON)
    Scene_NightLights.sendCommand(OFF)
  end
    
@@ -87,5 +94,6 @@ then
    RyansDeskLamp_Dimmer.sendCommand(OFF)
    zwave_device_a8f41af1_node7_switch_dimmer.sendCommand(OFF)
 
+   State_isNight.sendCommand(ON)
    Scene_AllOff.sendCommand(OFF)
 end

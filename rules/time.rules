@@ -6,17 +6,9 @@ var Number ryanAlarmStep   = 1
 
 rule "Blinds open"
 when
-  Channel "astro:sun:local:rise#event" triggered END
+  Time cron "0 30 7 ? * MON-FRI" or
+  Time cron "0  0 8 ? * SAT,SUN"
 then
-  if (blindUpTimer !== null && ! blindUpTimer.hasTerminated()) {
-    blindUpTimer.cancel();
-  }
-
-  var int cloudiness =((LocalWeatherAndForecast_Current_Cloudiness.state as Number).intValue)
-
-  logInfo("Blinds Open", "Sunrise Ended, delaying " + cloudiness + " minutes for it to be bright out")
-
-  blindUpTimer = createTimer(now.plusMinutes(cloudiness), [ |
     LRBlindL_Rollershutter.sendCommand(UP)
     LRBlindC_Rollershutter.sendCommand(UP)
     LRBlindR_Rollershutter.sendCommand(UP)
@@ -24,27 +16,43 @@ then
     BlindNookR_Rollershutter.sendCommand(UP)
     BlindNookL_Rollershutter.sendCommand(UP)
   
-    BedroomBlinds_Rollershutter.sendCommand(UP)
-
     CaitsOfficeBlinds_Rollershutter.sendCommand(UP)
-    GuestBedBlinds_Rollershutter.sendCommand(UP)
     RyansOfficeBlinds_Rollershutter.sendCommand(UP)
-    StiarwellBlinds_Rollershutter.sendCommand(UP)
-  ])
+    StairwellBlinds_Rollershutter.sendCommand(UP)
+    KitchenBlinds_Rollershutter.sendCommand(UP)
+end
+
+rule "Bedroom blinds open"
+when
+  Time cron "0 0 8 ? * MON-FRI" or
+  Time cron "0 30 8 ? * SAT,SUN"
+then
+    BedroomBlinds_Rollershutter.sendCommand(UP)
+    GuestBedBlinds_Rollershutter.sendCommand(UP)
 end
 
 
 rule "Ryan's Alarm On"
 when
-  Time cron "0 0 5 ? * MON-FRI"
+  Time cron "0 0 5 ? * MON-FRI" or
+  Time cron "1 0 5 ? * MON-FRI"
 then
+  logInfo("ryans-alarm.rule", "In Ryan's Alarm")
+
   if (ryanAlarmTimer !== null && !ryanAlarmTimer.hasTerminated()) {
-    ryanAlarmTimer.cancel()
+    logInfo("ryans-alarm.rule", "timer was already running, cancelling")
+    try {
+      ryanAlarmTimer.cancel();
+    }
+    catch (Throwable e) {
+      logInfo("ryans-alarm.rule", "some sort of exception... " + e.toString());
+    }
   }
 
   if (RyanPresent.state == ON) {
     ryanAlarmTimer = createTimer(now, [ |
        if ((RyansLamp_Dimmer.state as Number) >= ryanAlarmTarget) {
+         logInfo("ryans-alarm.rule", "Ryans alarm reached target, ending sequence");
          return;
        }
        else {
@@ -52,6 +60,9 @@ then
          ryanAlarmTimer.reschedule(now.plusMinutes(1))
        }
     ])
+  }
+  else {
+     logInfo("ryans-alarm.rule", "Ryan not present, so not turning on the alarm")
   }
 end
 
@@ -69,21 +80,30 @@ rule "Cancel Ryans Alarm if overridden"
 when
   Item RyansLamp_Dimmer received command OFF
 then
-  ryanAlarmTimer.cancel()
+  if (ryanAlarmTimer !== null) {
+    ryanAlarmTimer.cancel()
+  }
 end
 
 
 
-rule "Morning Lights on"
+rule "Morning Lights on weekday"
 when
-  Time cron "0 0 6 ? * MON-FRI" or
-  Time cron "0 30 7 ? * SAT,SUN"
+  Time cron "0 0 6 ? * MON-FRI"
 then
   Scene_MorningLights.sendCommand(ON)
   State_isNight.sendCommand(OFF)
 
   RyansDeskLamp_Dimmer.sendCommand(ON)
   zwave_device_a8f41af1_node7_switch_dimmer.sendCommand(ON)
+end
+
+rule "Morning Lights on weekend"
+when
+  Time cron "0 30 7 ? * SAT,SUN"
+then
+  Scene_MorningLights.sendCommand(ON)
+  State_isNight.sendCommand(OFF)
 end
 
 
@@ -111,15 +131,10 @@ then
 end
 
 
-rule "Blinds close cloudy day"
+rule "Blinds close at sunset"
 when
-  //TODO: this should be a luminance thing...
-  Channel "astro:sun:local:set#event" triggered START or
-  Time cron "0 0 19 ? * * " 
+  Channel "astro:sun:local:set#event" triggered START
 then
-  var int cloudiness =(LocalWeatherAndForecast_Current_Cloudiness.state as Number).intValue
-
-  if (cloudiness >= 50) {
     LRBlindL_Rollershutter.sendCommand(DOWN)
     LRBlindC_Rollershutter.sendCommand(DOWN)
     LRBlindR_Rollershutter.sendCommand(DOWN)
@@ -132,31 +147,33 @@ then
     CaitsOfficeBlinds_Rollershutter.sendCommand(DOWN)
     GuestBedBlinds_Rollershutter.sendCommand(DOWN)
     RyansOfficeBlinds_Rollershutter.sendCommand(DOWN)
-    StiarwellBlinds_Rollershutter.sendCommand(DOWN)
+    StairwellBlinds_Rollershutter.sendCommand(DOWN)
+    KitchenBlinds_Rollershutter.sendCommand(DOWN)
+end
+
+rule "Blinds close when it gets dark out"
+when
+  Item FrontPorchMultisensor_SensorLuminance changed
+then
+  if ((FrontPorchMultisensor_SensorLuminance.state as Number).intValue <= 20 && now.getHourOfDay > 15) {
+    LRBlindL_Rollershutter.sendCommand(DOWN)
+    LRBlindC_Rollershutter.sendCommand(DOWN)
+    LRBlindR_Rollershutter.sendCommand(DOWN)
+
+    BlindNookL_Rollershutter.sendCommand(DOWN)
+    BlindNookR_Rollershutter.sendCommand(DOWN)
+
+    BedroomBlinds_Rollershutter.sendCommand(DOWN)
+
+    CaitsOfficeBlinds_Rollershutter.sendCommand(DOWN)
+    GuestBedBlinds_Rollershutter.sendCommand(DOWN)
+    RyansOfficeBlinds_Rollershutter.sendCommand(DOWN)
+    StairwellBlinds_Rollershutter.sendCommand(DOWN)
+    KitchenBlinds_Rollershutter.sendCommand(DOWN)
   }
 end
 
 
-rule "Blinds close sunny day"
-when
-  Channel "astro:sun:local:set#event" triggered START or
-  Time cron "0 0 21 ? * * " 
-then
-  LRBlindL_Rollershutter.sendCommand(DOWN)
-  LRBlindC_Rollershutter.sendCommand(DOWN)
-  LRBlindR_Rollershutter.sendCommand(DOWN)
-
-  BlindNookL_Rollershutter.sendCommand(DOWN)
-  BlindNookR_Rollershutter.sendCommand(DOWN)
-
-  BedroomBlinds_Rollershutter.sendCommand(DOWN) 
-
-  CaitsOfficeBlinds_Rollershutter.sendCommand(DOWN)
-  GuestBedBlinds_Rollershutter.sendCommand(DOWN)
-  RyansOfficeBlinds_Rollershutter.sendCommand(DOWN)
-  StiarwellBlinds_Rollershutter.sendCommand(DOWN)
-end
-  
 
 
 rule "Nighttime"
@@ -165,6 +182,7 @@ when
   Time cron "0 59 23 ? * FRI,SAT *"
 then
   Scene_AllOff.sendCommand(ON)
+  Scene_NightLights.sendCommand(ON)
   State_isNight.sendCommand(ON)
 end
 

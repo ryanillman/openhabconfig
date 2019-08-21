@@ -15,4 +15,6 @@ Items {
 
 	Weather*    : strategy = everyHour, restoreOnStartup
 
+        // persist all items once a day and on every change and restore them from the db at startup
+	* : strategy = everyChange, everyDay, restoreOnStartup
 }
