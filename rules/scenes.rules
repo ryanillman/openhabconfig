@@ -42,7 +42,7 @@ then
    CouchLamps_Dimmer.sendCommand(20)
    CurioCabinet_Dimmer.sendCommand(10)
 
-   logInfo("Movie time is triggering, checking diningroom light state: "  + (DiningroomLights_Dimmer.state as Number).toString);
+   logInfo("movie_scene.rules", "Movie time is triggering, checking diningroom light state: "  + (DiningroomLights_Dimmer.state as Number).toString);
 
    if (DiningroomLights_Dimmer.state as Number > 20) {
       logInfo("Diningroom Lights were over 20")

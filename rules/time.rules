@@ -3,11 +3,12 @@ var Timer  ryanAlarmTimer
 var Number ryanAlarmTarget = 40
 var Number ryanAlarmStep   = 1
 
+var Number blindsUnderManualControl = 0
 
 rule "Blinds open"
 when
-  Time cron "0 30 7 ? * MON-FRI" or
-  Time cron "0  0 8 ? * SAT,SUN"
+  Time cron "0  0 8 ? * MON-FRI" or
+  Time cron "0 30 8 ? * SAT,SUN"
 then
     LRBlindL_Rollershutter.sendCommand(UP)
     LRBlindC_Rollershutter.sendCommand(UP)
@@ -20,6 +21,8 @@ then
     RyansOfficeBlinds_Rollershutter.sendCommand(UP)
     StairwellBlinds_Rollershutter.sendCommand(UP)
     KitchenBlinds_Rollershutter.sendCommand(UP)
+
+    blindsUnderManualControl = 0
 end
 
 rule "Bedroom blinds open"
@@ -155,7 +158,7 @@ rule "Blinds close when it gets dark out"
 when
   Item FrontPorchMultisensor_SensorLuminance changed
 then
-  if ((FrontPorchMultisensor_SensorLuminance.state as Number).intValue <= 20 && now.getHourOfDay > 15) {
+  if ((FrontPorchMultisensor_SensorLuminance.state as Number).intValue <= 20 && now.getHourOfDay > 15 && 0 == blindsUnderManualControl) {
     LRBlindL_Rollershutter.sendCommand(DOWN)
     LRBlindC_Rollershutter.sendCommand(DOWN)
     LRBlindR_Rollershutter.sendCommand(DOWN)
@@ -171,6 +174,26 @@ then
     StairwellBlinds_Rollershutter.sendCommand(DOWN)
     KitchenBlinds_Rollershutter.sendCommand(DOWN)
   }
+end
+
+rule "Blinds go out of auto mode if someone messes with them"
+when
+  Item LRBlindL_Rollershutter received command UP or
+  Item LRBlindC_Rollershutter received command UP or
+  Item LRBlindR_Rollershutter received command UP or
+
+  Item BlindNookL_Rollershutter received command UP or
+  Item BlindNookR_Rollershutter received command UP or
+
+  Item BedroomBlinds_Rollershutter received command UP or
+
+  Item CaitsOfficeBlinds_Rollershutter received command UP or
+  Item GuestBedBlinds_Rollershutter received command UP or
+  Item RyansOfficeBlinds_Rollershutter received command UP or
+  Item StairwellBlinds_Rollershutter received command UP or
+  Item  KitchenBlinds_Rollershutter received command UP
+then
+  blindsUnderManualControl = 1
 end
 
 

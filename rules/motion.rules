@@ -1,6 +1,6 @@
 var Timer bathroomNightlightTimer
 var Timer kitchenNightlightTimer
-
+var Timer livingroomNightlightTimer
 
 rule "Kitchen light turns on when motion at night"
 when
@@ -22,6 +22,31 @@ then
     logInfo("kitchen.motion.nightlight", "not triggered because not night" + State_isNight.state.toString());
   }
 end
+
+
+
+rule "Livingroom light turns on when motion at night"
+when
+  Item LivingRoomMultisensor_AlarmMotion changed to ON
+then
+  if (State_isNight.state == "ON") {
+    logInfo("livingroom.motion.nightlight", "livingroom nightlight triggered!");
+    SofaTableLamps_Dimmer.sendCommand(15);
+
+    if (livingroomNightlightTimer !== null && !livingroomNightlightTimer.hasTerminated()) {
+      livingroomNightlightTimer.cancel();
+    }
+
+    livingroomNightlightTimer = createTimer(now.plusMinutes(5), [ |
+      SofaTableLamps_Dimmer.sendCommand(0);
+    ])
+  }
+  else {
+    logInfo("livingroom.motion.nightlight", "not triggered because not night" + State_isNight.state.toString());
+  }
+end
+
+
 
 rule "Upstairs Blinds Close when the sun comes around"
 when
