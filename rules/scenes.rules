@@ -69,7 +69,7 @@ then
    KitchenSinkLights_Switch.sendCommand(OFF)
 
    RyansDeskLamp_Dimmer.sendCommand(OFF)
-   zwave_device_a8f41af1_node7_switch_dimmer.sendCommand(OFF)
+   RyansOtherDeskLamp_Dimmer.sendCommand(OFF)
 
 
    gAllLights.sendCommand(OFF)
@@ -92,7 +92,7 @@ then
    BarLights_Dimmer.sendCommand(OFF)
 
    RyansDeskLamp_Dimmer.sendCommand(OFF)
-   zwave_device_a8f41af1_node7_switch_dimmer.sendCommand(OFF)
+   RyansOtherDeskLamp_Dimmer.sendCommand(OFF)
 
    State_isNight.sendCommand(ON)
    Scene_AllOff.sendCommand(OFF)

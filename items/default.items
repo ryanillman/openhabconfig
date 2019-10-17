@@ -19,7 +19,7 @@ Group:Switch:OR(ON,OFF) gAllLights
 
 
 Group gGlobalStates
-String State_isNight "Is Night" (gGlobalStates)
+Switch State_isNight "Is Night" (gGlobalStates)
 
 
 

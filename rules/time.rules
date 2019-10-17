@@ -98,7 +98,7 @@ then
   State_isNight.sendCommand(OFF)
 
   RyansDeskLamp_Dimmer.sendCommand(ON)
-  zwave_device_a8f41af1_node7_switch_dimmer.sendCommand(ON)
+  RyansOtherDeskLamp_Dimmer.sendCommand(ON)
 end
 
 rule "Morning Lights on weekend"
@@ -208,8 +208,6 @@ then
   Scene_NightLights.sendCommand(ON)
   State_isNight.sendCommand(ON)
 end
-
-
 
 
 
