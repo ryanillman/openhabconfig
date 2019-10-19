@@ -49,6 +49,10 @@ then
       DiningroomLights_Dimmer.sendCommand(15)
    }
 
+   if (BarLights_Dimmer.state as Number > 10) {
+      BarLights_Dimmer.sendCommand(25)
+   }
+
    Scene_MovieLights.sendCommand(OFF)
  end
 
