@@ -1,0 +1,467 @@
+import java.util.HashMap
+
+
+//constants
+val String REASON_MANUAL    = "manual"
+val String REASON_TIME      = "time"
+val String REASON_MOTION    = "motion"
+val String REASON_WEATHER   = "weather"
+val String REASON_TIMER     = "timer"
+val String REASON_OTHER     = "other"
+val String REASON_GOODNIGHT = "goodnight"
+
+val HashMap<String, String>   lastStateReason = newHashMap()
+val HashMap<String, DateTime> lastStateDate   = newHashMap()
+val HashMap<String, Timer>    autoOffTimers   = newHashMap()
+
+
+val org.eclipse.xtext.xbase.lib.Functions$Function4 <GenericItem, String, HashMap<String, String>, HashMap<String, DateTime>, Boolean> isOKToTurnOnBecause = [ 
+    GenericItem item, String reason, HashMap<String, String> itemReason, HashMap<String, DateTime> itemTime | 
+
+    logInfo("isOKToTurnOn","at the top of isOKToTurnOnBecause")
+    var String oldReason = itemReason.get(item.name);
+    if (oldReason === null) { oldReason = "other"; }
+
+    var currentState = item.state;
+    
+    //90 minutes seems like a good wait time for manual overrides. we'll see how it goes
+    //this will probably come from group membership or something
+    var DateTime oldTime = itemTime.get(item.name);
+    if (oldTime === null) { oldTime = now; }
+    val boolean manualTimeExpired  = oldTime.plusMinutes(90).isBefore(now);
+
+    var boolean retval = true;
+
+    if (currentState.toString == "OFF" && oldReason == "manual" && ! manualTimeExpired) {
+        retval = false;
+    }
+    else if (
+        (reason == "weather" && (oldReason == "time")) ||
+        (reason == "other" && (oldReason == "time" || oldReason == "weather")) ||
+        (reason == "timer" && (oldReason == "time" || oldReason == "weather" || oldReason == "other")) ||
+        (reason == "motion" && (oldReason == "time" || oldReason == "weather" || oldReason == "other" || oldReason == "timer"))
+        )
+    {
+        retval = false;
+    }
+
+    retval
+]
+
+val org.eclipse.xtext.xbase.lib.Functions$Function4<GenericItem, String, HashMap<String, String>, HashMap<String, DateTime>, Boolean> isOKToTurnOffBecause = [ 
+    GenericItem item, String reason, HashMap<String, String> itemReason, HashMap<String, DateTime> itemTime | 
+
+    var String oldReason = itemReason.get(item.name);
+    if (oldReason === null) { oldReason = "other"; }
+
+    var State currentState = item.state;
+    
+    //90 minutes seems like a good wait time for manual overrides. we'll see how it goes
+    //this will probably come from group membership or something
+    var DateTime oldTime = itemTime.get(item.name);
+    if (oldTime === null) { oldTime = now; }
+    val boolean manualTimeExpired  = oldTime.plusMinutes(90).isBefore(now);
+
+    var boolean retval = true;
+
+    if (currentState.toString == "ON" && oldReason == "manual" && ! manualTimeExpired) {
+        retval = false;
+    }
+    else if (
+        (reason == "weather" && (oldReason == "time")) ||
+        (reason == "other" && (oldReason == "time" || oldReason == "weather")) ||
+        (reason == "timer" && (oldReason == "time" || oldReason == "weather" || oldReason == "other")) ||
+        (reason == "motion" && (oldReason == "time" || oldReason == "weather" || oldReason == "other" || oldReason == "timer"))
+        )
+    {
+        retval = false;
+    }
+
+    retval
+]
+
+
+//used as a flag to the global item update handler
+//that an ongoing automatic operation is running, 
+//to distinguish from an update caused by a person
+//pushing a button/switch or giving Alexa a command
+var Number isUpdateAutomatic = 0
+
+
+
+
+
+///
+/// Generic Group-based rules
+///
+
+rule "gTrackStateReason item changed so track manual state"
+when
+    Member of gTrackStateReason received command
+then
+    if (isUpdateAutomatic == 1) {
+        //this rule is all about tracking manual state changes
+        //whoever is automatically changing state will be doing
+        //this housekeeping
+        return;
+    }
+
+    logInfo("gTrackStateReason", "gTrackStateReason item " + triggeringItem.name + " changed in a non-automatic way")
+    lastStateReason.put(triggeringItem.name, REASON_MANUAL);
+    lastStateDate.put(triggeringItem.name, now.toString());
+end
+
+
+rule "AutoOff_60 items auto off after 60 minutes unless messed with"
+when
+    Member of gAutoOff_60 received command ON
+then
+    val item = gAutoOff.allMembers.findFirst[] as GenericItem
+    var existingTimer = autoOffTimers.get(triggeringItem.name);
+
+    if (existingTimer !== null && ! existingTimer.hasTerminated) {
+        existingTimer.cancel();
+    }
+
+    autoOffTimers.put(triggeringItem.name, createTimer(now.plusMinutes(60), [ |
+        isUpdateAutomatic = 1
+        item.sendCommand(OFF);
+
+        lastStateReason.put(item.name, REASON_TIMER);
+        lastStateDate.put(item.name, now.toString());
+
+        Thread.sleep(100); //guess to let things get caught up
+        isUpdateAutomatic = 0;
+
+    ]))
+end
+
+rule "Luminance and Sun control vIsLightOut"
+when
+    Item FrontPorchMultisensor_SensorLuminance changed or
+    Item LocalSun_Position_Elevation changed
+then
+    val luminance = FrontPorchMultisensor_SensorLuminance.state as Number
+    val elevation = LocalSun_Position_Elevation.state as Number
+
+    if (luminance < 20 || elevation < 10) {
+        vIsLightOut.postUpdate(OFF)
+    }
+    else {
+        vIsLightOut.postUpdate(ON)
+    }
+end
+
+
+
+///
+/// Time-triggered Lights rules
+///
+
+rule "Morning Lights on weekday & weekend"
+when
+  Time cron "0 0 6 ? * MON-FRI" or
+  Time cron "0 30 7 ? * SAT,SUN"
+then
+    isUpdateAutomatic = 1;
+
+    if (now.dayOfWeek() < 6) {
+        if (isOKToTurnOnBecause(RyansDeskLamp_Dimmer, REASON_TIME, lastStateReason, lastStateTime)){
+            RyansDeskLamp_Dimmer.sendCommand(ON);
+            lastStateReason.put(RyansDeskLamp_Dimmer.name, REASON_TIME);
+            lastStateDate.put(RyansDeskLamp_Dimmer.name, now);
+        }
+
+        if (isOKToTurnOnBecause(RyansOtherDeskLamp_Dimmer, REASON_TIME, lastStateReason, lastStateTime)){
+            RyansOtherDeskLamp_Dimmer.sendCommand(ON);
+            lastStateReason.put(RyansOtherDeskLamp_Dimmer.name, REASON_TIME);
+            lastStateDate.put(RyansOtherDeskLamp_Dimmer.name, now);
+        }
+    }
+
+
+    if (isOKToTurnOnBecause(SofaTableLamps_Dimmer, REASON_TIME, lastStateReason, lastStateTime)){
+        SofaTableLamps_Dimmer.sendCommand(40);
+        lastStateReason.put(SofaTableLamps_Dimmer.name, REASON_TIME);
+        lastStateDate.put(SofaTableLamps_Dimmer.name, now);
+    }
+
+    if (isOKToTurnOffBecause(FloorLamps_Dimmer, REASON_TIME, lastStateReason, lastStateTime)){
+        FloorLamps_Dimmer.sendCommand(OFF);
+        lastStateReason.put(FloorLamps_Dimmer.name, REASON_TIME);
+        lastStateDate.put(FloorLamps_Dimmer.name, now);
+    }
+
+    if (isOKToTurnOffBecause(MantleLight_Switch, REASON_TIME, lastStateReason, lastStateTime)){
+        MantleLight_Switch.sendCommand(OFF);
+        lastStateReason.put(MantleLight_Switch.name, REASON_TIME);
+        lastStateDate.put(MantleLight_Switch.name, now);
+    }
+
+    if (isOKToTurnOnBecause(CouchLamps_Dimmer, REASON_TIME, lastStateReason, lastStateTime)){
+        CouchLamps_Dimmer.sendCommand(40);
+        lastStateReason.put(CouchLamps_Dimmer.name, REASON_TIME);
+        lastStateDate.put(CouchLamps_Dimmer.name, now);
+    }
+
+    if (isOKToTurnOnBecause(CurioCabinet_Dimmer, REASON_TIME, lastStateReason, lastStateTime)){
+        CurioCabinet_Dimmer.sendCommand(30);
+        lastStateReason.put(CurioCabinet_Dimmer.name, REASON_TIME);
+        lastStateDate.put(CurioCabinet_Dimmer.name, now);
+    }
+
+    if (isOKToTurnOnBecause(CoffeeLight_Switch, REASON_TIME, lastStateReason, lastStateTime)){
+        CoffeeLight_Switch.sendCommand(ON);
+        lastStateReason.put(CoffeeLight_Switch.name, REASON_TIME);
+        lastStateDate.put(CoffeeLight_Switch.name, now);
+    }
+    
+
+    Thread.sleep(100); //let everything catch up before turning off automatic updates
+
+    isUpdateAutomatic = 0;
+end
+
+
+
+rule "Drinking Time"
+when
+  Time cron "0 0 12 ? * * " 
+then
+    isUpdateAutomatic = 1;
+
+    if (isOKToTurnOffBecause(CoffeeLight_Switch, REASON_TIME, lastStateReason, lastStateTime)){
+        CoffeeLight_Switch.sendCommand(OFF);
+        lastStateReason.put(CoffeeLight_Switch.name, REASON_TIME);
+        lastStateDate.put(CoffeeLight_Switch.name, now);
+    }
+
+    if (isOKToTurnOnBecause(BarLights_Dimmer, REASON_TIME, lastStateReason, lastStateTime)){
+        BarLights_Dimmer.sendCommand(100);
+        lastStateReason.put(BarLights_Dimmer.name, REASON_TIME);
+        lastStateDate.put(BarLights_Dimmer.name, now);
+    }
+
+    Thread.sleep(100); //let everything catch up before turning off automatic updates
+
+    isUpdateAutomatic = 0;
+end
+
+
+rule "Livingroom Evening Lights on"
+when
+  Time cron "0 0 17 ? * * " or
+  Item LivingRoomMultisensor_SensorLuminance received update
+then
+  var Number hour = now.getHourOfDay()
+  logInfo("eveninglights", "Hour is " + hour)
+  var Number luminance = LivingRoomMultisensor_SensorLuminance.state as Number;
+  logInfo("eveninglights", "luminance is " + luminance)
+
+  //the lights should come up to 'evening' level if the luminace gets below 30, or 
+  //at 5pm, whichever comes first. but don't turn on after 9pm  for luminance
+
+  if ((hour >= 17 && hour <= 18) || (luminance < 30 && hour < 21)) {
+    logInfo("eveninglights", "go to do stuff! ")
+    isUpdateAutomatic = 1;
+
+    if (isOKToTurnOnBecause(SofaTableLamps_Dimmer, REASON_TIME, lastStateReason, lastStateTime)){
+        logInfo("eveninglights", "got OK to update the sofa table lamps!")
+        SofaTableLamps_Dimmer.sendCommand(100);
+        lastStateReason.put(SofaTableLamps_Dimmer.name, REASON_TIME);
+        lastStateDate.put(SofaTableLamps_Dimmer.name, now);
+    }
+
+    if (isOKToTurnOnBecause(FloorLamps_Dimmer, REASON_TIME, lastStateReason, lastStateTime)){
+        FloorLamps_Dimmer.sendCommand(100);
+        lastStateReason.put(FloorLamps_Dimmer.name, REASON_TIME);
+        lastStateDate.put(FloorLamps_Dimmer.name, now);
+    }
+
+    if (isOKToTurnOnBecause(MantleLight_Switch, REASON_TIME, lastStateReason, lastStateTime)){
+        MantleLight_Switch.sendCommand(ON);
+        lastStateReason.put(MantleLight_Switch.name, REASON_TIME);
+        lastStateDate.put(MantleLight_Switch.name, now);
+    }
+
+    if (isOKToTurnOnBecause(CouchLamps_Dimmer, REASON_TIME, lastStateReason, lastStateTime)){
+        CouchLamps_Dimmer.sendCommand(100);
+        lastStateReason.put(CouchLamps_Dimmer.name, REASON_TIME);
+        lastStateDate.put(CouchLamps_Dimmer.name, now);
+    }
+
+    if (isOKToTurnOnBecause(CurioCabinet_Dimmer, REASON_TIME, lastStateReason, lastStateTime)){
+        CurioCabinet_Dimmer.sendCommand(100);
+        lastStateReason.put(CurioCabinet_Dimmer.name, REASON_TIME);
+        lastStateDate.put(CurioCabinet_Dimmer.name, now);
+    }
+
+    Thread.sleep(100); //let everything catch up before turning off automatic updates
+
+    isUpdateAutomatic = 0;
+  }
+end
+
+
+rule "Kitchen Evening Lights On"
+when
+    Time cron "0 0 17 ? * *" or
+    Item KitchenMultisensor_SensorLuminance received update
+then
+    //the lights should come up to 'evening' level if the luminace gets below 30, or 
+    //at 5pm, whichever comes first
+
+    var Number hour = now.getHourOfDay()
+    var Number luminance = KitchenMultisensor_SensorLuminance.state as Number;
+
+    if (hour >= 17 || luminance < 30) {
+        isUpdateAutomatic = 1;
+        if (isOKToTurnOnBecause(KitchenCornerLight_Dimmer, REASON_TIME, lastStateReason, lastStateTime)) {
+            KitchenCornerLight_Dimmer.sendCommand(100);
+            lastStateReason.put(KitchenCornerLight_Dimmer.name, REASON_TIME);
+            lastStateDate.put(KitchenCornerLight_Dimmer.name, now);
+        }
+
+        if (isOKToTurnOnBecause(KitchenSinkLights_Switch, REASON_TIME, lastStateReason, lastStateTime)) {
+            KitchenSinkLights_Switch.sendCommand(ON);
+            lastStateReason.put(KitchenSinkLights_Switch.name, REASON_TIME);
+            lastStateDate.put(KitchenSinkLights_Switch.name, now);
+        }
+        Thread.sleep(100); //let everything catch up before turning off automatic updates
+
+        isUpdateAutomatic = 0;
+    }
+end
+
+
+
+rule "Nighttime"
+when
+    Time cron "0 30 22 ? * MON,TUE,WED,THU,SUN *" or
+    Time cron "0 59 23 ? * FRI,SAT *" or
+    Item Scene_NightLights received command ON
+then
+    isUpdateAutomatic = 1;
+
+    gGoodnightLights.members.forEach[ i | 
+        if (isOKToTurnOffBecause(i, REASON_GOODNIGHT, lastStateReason, lastStateTime)) {
+            i.sendCommand(OFF);
+            lastStateReason.put(i.name, REASON_GOODNIGHT);
+            lastStateDate.put(i.name, now);
+        }
+    ]
+
+    Scene_NightLights.sendCommand(OFF);
+
+    Thread.sleep(100);
+    isUpdateAutomatic = 0;
+end
+
+
+///
+/// Variously-triggered blinds rules
+///
+
+rule "Non-Bedroom blinds open in the morning"
+when
+    Time cron "0  0 8 ? * MON-FRI" or
+    Time cron "0 30 8 ? * SAT,SUN" or
+    Item vIsLightOut changed from OFF to ON
+then
+    var ourreason = REASON_TIME;
+
+    if (triggeringItem && triggeringItem.name == "vIsLightOut") {
+        ourreason = REASON_WEATHER;
+    }
+
+    isUpdateAutomatic = 1;
+
+//    gAllBlinds.members.filter[ b | !b.getGroupNames.contains("gBedroomBlinds") ].forEach [ b | 
+//        if (isOKToTurnOnBecause(b, ourreason, lastStateReason, lastStateTime)) {
+//            b.sendCommand(UP)
+//            lastStateReason(b.name, ourreason);
+//            lastStateDate(b.name, now);
+//       }
+//        true
+//    ]
+
+    Thread.sleep(100);
+    isUpdateAutomatic = 0;
+end
+
+
+rule "Bedroom blinds open in the morning"
+when
+    Time cron "0 0 8 ? * MON-FRI" or
+    Time cron "0 30 8 ? * SAT,SUN"
+then
+    isUpdateAutomatic = 1;
+
+//    gBedroomBlinds.forEach [ b | 
+//        if (isOKToTurnOnBecause(b, REASON_TIME, lastStateReason, lastStateTime)) {
+//            b.sendCommand(UP)
+//            lastStateReason(b.name, REASON_TIME);
+//            lastStateDate(b.name, now);
+//        }
+//        true
+//    ]
+
+    Thread.sleep(100);
+    isUpdateAutomatic = 0;
+end
+
+
+rule "All blinds close when it gets dark out"
+when
+    Item vIsLightOut changed from ON to OFF or
+    Channel "astro:sun:local:set#event" triggered START or
+    Time cron "0 45 20 * * ?"
+then
+    var ourreason = REASON_TIME;
+    if (triggeringItem !== null && triggeringItem.name == "vIsLightOut") {
+        ourreason = REASON_WEATHER;
+    }
+
+    isUpdateAutomatic = 1;
+
+    gAllBlinds.members.forEach [ blind | 
+        if (isOKToTurnOnBecause(blind, ourreason, lastStateReason, lastStateTime)) {
+            blind.sendCommand(DOWN)
+            lastStateReason(blind.name, ourreason);
+            lastStateDate(blind.name, now);
+        }
+        true
+    ]
+
+    Thread.sleep(100);
+    isUpdateAutomatic = 0;
+end
+
+///
+/// Weather based rules
+///
+
+rule "Auto Deck Lights"
+when
+  Item LocalSun_Position_Elevation changed
+then
+  var int cloudiness =(LocalWeatherAndForecast_Current_Cloudiness.state as Number).intValue
+  var int temperature = (LocalWeatherAndForecast_Current_OutdoorTemperature.state as Number).intValue
+  var int elevation = (LocalSun_Position_Elevation.state as Number).intValue
+
+  //the cloudier it is, the earlier the lights should turn on
+  var int topElevation = 15 + ( 20 * (cloudiness / 100))
+
+  //68 is a rough guess of when we'd likely be outside
+  if (elevation < topElevation && elevation > 0 && temperature > 68) {
+      isUpdateAutomatic = 1;
+      if (isOKToTurnOnBecause(DeckLights_Switch, REASON_WEATHER, lastStateReason, lastStateTime)){
+        DeckLights_Switch.sendCommand(ON);
+        lastStateReason.put(DeckLights_Switch.name, REASON_WEATHER);
+        lastStateDate.put(DeckLights_Switch.name, now);
+      }
+
+      Thread.sleep(100);  
+      isUpdateAutomatic =0;
+  }
+end

@@ -29,7 +29,7 @@ end
 
 rule "Livingroom light turns on when motion at night"
 when
-  Item LivingRoomMultisensor_AlarmMotion changed to ON
+  Item LivingRoomMultisensor_AlarmMotion changed to ON OR
 then
   if (State_isNight.state == ON) {
     logInfo("livingroom.motion.nightlight", "livingroom nightlight triggered!");
@@ -73,46 +73,6 @@ then
   else {
     logInfo("ryanoffice.motion.nightlight", "not triggered because not night" + State_isNight.state.toString());
   }
-end
-
-rule "Master Bath Nightlight"
-when
-	Item MasterBathroomMultisensor_AlarmMotion changed to ON
-then
-	if ((MasterBathroom_Luminance.state as Number) < 10)
-	{
-		logInfo("bathroom.nightlight", "low luminance and bathroom motion")
-
-		MasterBathroomVanityLight_Dimmer.sendCommand(0)
-		bathroomTimer = createTimer(now, [ |
-			var newState = MasterBathroomVanityLight_Dimmer.state as Number + 1
-   			logInfo("bathroom.nightlight", "nightlight update, new value " + newState)
-
-			MasterBathroomVanityLight_Dimmer.sendCommand(newState)
-			if (newState < 20) {
-				bathroomTimer.reschedule(now.plusSeconds(1));
-			}
-		])
-	}
-end
-
-rule "Master Bath Nightlight OFF"
-when
-	Item MasterBathroomMultisensor_AlarmMotion changed to OFF
-then
-	if (State_isNight.state == ON)
-	{
-		logInfo("bathroom.nightlight", "night, and the motion sensor turned off")
-		bathroomTimer = createTimer(now, [ |
-			var newState = MasterBathroomVanityLight_Dimmer.state as Number - 2
-			if (newState < 0) { newState = 0; }
-			MasterBathroomVanityLight_Dimmer.sendCommand(newState)
-   			logInfo("bathroom.nightlight", "nightlight update, new value " + newState)
-			if (newState >0) {
-				bathroomTimer.reschedule(now.plusSeconds(1));
-			}
-		])
-	}
 end
 
 

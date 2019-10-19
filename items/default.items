@@ -13,15 +13,29 @@ Group gNookBlinds
 Group gUpstairsBlinds
 Group gBedroomBlinds
 Group gAllBlinds
+Group gGoodnightLights
 
+Group gAutoOff
+Group gManualOverride
+Group gAutoOff_60
+Group gAutoOff_5
+
+Group gTrackStateReason
+
+Group gNightlight_Night
+Group gNightlight_Evening
 
 Group:Switch:OR(ON,OFF) gAllLights
 
 
 Group gGlobalStates
+
 Switch State_isNight "Is Night" (gGlobalStates)
 
 
 
 Number WindSpeedMph        "Windspeed [%.0f mph]"  <windspeed>      (Weather) { channel="openweathermap:weather-and-forecast:f16b7484:local:current#wind-speed" }
 Number AtmoPressureInHg    "Pressure [%.2f inHg]"  <pressure>       (Weather) { channel="openweathermap:weather-and-forecast:f16b7484:local:current#pressure" }
+
+
+Switch vIsLightOut "Its Light Out" <light> (gGlobalStates)
