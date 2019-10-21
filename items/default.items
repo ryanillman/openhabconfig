@@ -22,8 +22,23 @@ Group gAutoOff_5
 
 Group gTrackStateReason
 
-Group gNightlight_Night
-Group gNightlight_Evening
+
+Group gNightlight_Livingroom_Sensor      //thing that trips on motion
+Group gNightlight_Livingroom_Luminance   //decides if its dark enough
+Group gNightlight_Livingroom_Light       //lights to turn on
+
+Group gNightlight_Bathroom_Sensor
+Group gNightlight_Bathroom_Luminance
+Group gNightlight_Bathroom_Light
+
+Group gNightlight_Kitchen_Sensor
+Group gNightlight_Kitchen_Luminance
+Group gNightlight_Kitchen_Light
+
+Group gNightlight_ROffice_Sensor
+Group gNightlight_ROffice_Luminance
+Group gNightlight_ROffice_Light
+
 
 Group:Switch:OR(ON,OFF) gAllLights
 
@@ -39,3 +54,16 @@ Number AtmoPressureInHg    "Pressure [%.2f inHg]"  <pressure>       (Weather) { 
 
 
 Switch vIsLightOut "Its Light Out" <light> (gGlobalStates)
+
+String vItemReasonList "Item State Reason List"
+
+String CalMachias_NextEventName "Next Event Name"     <calendar> { caldavPersonal="calendar:machias type:UPCOMING eventNr:1 value:NAME"}
+String CalMachias_NextEventLocation "Next Event Location" <calendar> { caldavPersonal="calendar:machias type:UPCOMING eventNr:1 value:PLACE"}
+DateTime CalMachias_NextEventStarts "Next Event Starts"   <calendar> { caldavPersonal="calendar:machias type:UPCOMING eventNr:1 value:START"}
+DateTime CalMachias_NextEventEnds "Next Event Ends"     <calendar> { caldavPersonal="calendar:machias type:UPCOMING eventNr:1 value:END"}
+
+
+
+String Waste_Garbage_NextPickup "Next Garbage Pickup" <garbage>
+String Waste_Recycling_NextPickup "Next Recycling Pickup" <recycle>
+String Waste_Compost_NextPickup "Next Compost Pickup" <garbage>
