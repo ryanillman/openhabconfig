@@ -154,7 +154,7 @@ then
         reasonList = gTrackStateReason.members.sortBy[ name ].map[ i| 
             var lastState = if (lastStateReason.get(i.name) !== null) { lastStateReason.get(i.name) } else { "UNKNOWN"; }
             return String::format("%40s", i.name) + " => "+ lastState
-        ].reduce[ list, i | return list + "\n" + i ];
+        ].reduce[ list, i | return if (i !== null) {list + "\n" + i} else {list} ];
     }
     catch (Throwable t) {
         reasonList = "shit blew up coming up with the list"
@@ -743,7 +743,7 @@ then
     val fanState = MasterBathroomFan_Switch.state
     val fanStateReason = lastStateReason.get(MasterBathroomFan_Switch.name)
 
-    if (humidity > 80 && (fanState == OFF || fanStateReason != REASON_HEALTH_SAFETY) {
+    if (humidity > 80 && (fanState == OFF || fanStateReason != REASON_HEALTH_SAFETY)) {
         logWarn("bathroom high humidity", "Turning on bathroom fan due to extreme humidity");
         isUpdateAutomatic = 1;
 
@@ -787,7 +787,7 @@ then
     if (humidity > 60 && fanState == OFF) {
         isUpdateAutomatic = 1;
 
-        if (isOkToTurnOnBecause(MasterBathroomFan_Switch, REASON_WEATHER, lastStateReason, lastStateDate)){
+        if (isOKoToTurnOnBecause(MasterBathroomFan_Switch, REASON_WEATHER, lastStateReason, lastStateDate)){
             lastStateReason.put(MasterBathroomFan_Switch.name, REASON_WEATHER);
             lastStateDate.put(MasterBathroomFan_Switch.name, now);
             MasterBathroomFan_Switch.sendCommand(ON);
@@ -800,7 +800,7 @@ then
     else if (humidity < 55 && fanState == ON) {
         isUpdateAutomatic = 1; 
 
-        if (isOkToTurnOffBecause(MasterBathroomFan_Switch, REASON_WEATHER, lastStateReason, lastStateDate)){
+        if (isOKToTurnOffBecause(MasterBathroomFan_Switch, REASON_WEATHER, lastStateReason, lastStateDate)){
             MasterBathroomFan_Switch.sendCommand(OFF);
             lastStateReason.put(MasterBathroomFan_Switch.name, REASON_WEATHER);
             lastReasonDate.put(MasterBathroomFan_Switch.name, now);
