@@ -4,13 +4,14 @@ import org.eclipse.smarthome.model.script.ScriptServiceUtil
 
 
 //constants
-val String REASON_MANUAL    = "manual"
-val String REASON_TIME      = "time"
-val String REASON_MOTION    = "motion"
-val String REASON_WEATHER   = "weather"
-val String REASON_TIMER     = "timer"
-val String REASON_OTHER     = "other"
-val String REASON_GOODNIGHT = "goodnight"
+val String REASON_HEALTH_SAFETY = "health_safety"
+val String REASON_MANUAL        = "manual"
+val String REASON_TIME          = "time"
+val String REASON_MOTION        = "motion"
+val String REASON_WEATHER       = "weather"
+val String REASON_TIMER         = "timer"
+val String REASON_OTHER         = "other"
+val String REASON_GOODNIGHT     = "goodnight"
 
 val HashMap<String, String>   lastStateReason = newHashMap()
 val HashMap<String, DateTime> lastStateDate   = newHashMap()
@@ -35,8 +36,11 @@ val org.eclipse.xtext.xbase.lib.Functions$Function4 <GenericItem, String, HashMa
 
     var boolean retval = true;
 
-    //manual trumps all
-    if (oldReason == "manual" && ! manualTimeExpired) {
+    
+    if (reason != "health_safety" && oldReason == "health_safety") {
+        retval = false;
+    }
+    else if (oldReason == "manual" && ! manualTimeExpired) {
         retval = false;
     }
     //don't "downgrade" a reason for something to already be on
@@ -73,7 +77,10 @@ val org.eclipse.xtext.xbase.lib.Functions$Function4<GenericItem, String, HashMap
 
     var boolean retval = true;
 
-    if (reason=="goodnight"){
+    if (reason != "health_safety" && oldReason == "health_safety") {
+        retval = false;
+    }
+    else if (reason=="goodnight"){
         retval = true; //goodnight is a wierd quaisi manual reason that can override basically anything
     }
     else if (oldReason == "manual" && ! manualTimeExpired) {
@@ -115,9 +122,24 @@ then
     //whoever is automatically changing state will be doing
     //this housekeeping
     var DateTime oldTime = lastStateDate.get(triggeringItem.name);
+    var String oldReason = lastStateReason.get(triggeringItem.name);
     if (oldTime === null) { oldTime = now.minusMinutes(99); }
     val boolean isRecentChange  = now.minusSeconds(2).isBefore(oldTime);
-    if (isUpdateAutomatic != 1 && ! isRecentChange) {
+
+    val boolean appearsToBeManual = isUpdateAutomatic != 1 && ! isRecentChange;
+
+    if (appearsToBeManual && REASON_HEALTH_SAFETY == oldReason){
+        //request denied
+        logError("gTrackStateReason", "UNABLE TO COMPLY - HEALTH & SAFETY-SET ITEMS CANNOT BE OVERRIDEN MANUALLY");
+        isUpdateAutomatic = 1;
+
+        triggeringItem.sendCommand(if(receivedCommand == OFF) {ON} else {OFF});
+
+        Thread.sleep(300);
+
+        isUpdateAutomatic = 0;
+    }
+    else if (appearsToBeManual) {
         logInfo("gTrackStateReason", "gTrackStateReason item " + triggeringItem.name + " changed in a non-automatic way: " + receivedCommand)
         lastStateReason.put(triggeringItem.name, REASON_MANUAL);
         lastStateDate.put(triggeringItem.name, now);
@@ -182,8 +204,24 @@ when
     Item FrontPorchMultisensor_SensorLuminance changed or
     Item LocalSun_Position_Elevation changed
 then
-    val Number luminance = (FrontPorchMultisensor_SensorLuminance.state as Number).intValue
-    val Number elevation = (LocalSun_Position_Elevation.state as Number).intValue
+    var Number luminance
+    var Number elevation
+    
+    try {
+        luminance = (FrontPorchMultisensor_SensorLuminance.state as Number).intValue
+    }
+    catch (Throwable t) {
+        luminance = null
+        logWarn("vIsLightOut", "failed to compute luminance from " + FrontPorchMultisensor_SensorLuminance.state)
+    }
+
+    try{
+        elevation = (LocalSun_Position_Elevation.state as Number).intValue
+    }
+    catch(Throwable t){
+        elevation = null
+        logWarn("vIsLightOut", "failed to compute elevation from " + LocalSun_Position_Elevation.state)
+    }
 
     if ((luminance < 10 || elevation < 3) && vIsLightOut.state == ON) {
         vIsLightOut.postUpdate(OFF)
@@ -192,9 +230,6 @@ then
     else if ((luminance > 20 && elevation > 10) && vIsLightOut.state == OFF) {
         vIsLightOut.postUpdate(ON)
         logInfo("vIsLightOut", "vIsLightOut updated to on. luminance: " + luminance + " sun elevation:" + elevation)
-    }
-    else {
-        logInfo("vIsLightOut", "vIsLightOut DIDNT CHANGE luminance: " + luminance + " sun elevation:" + elevation)
     }
 end
 
@@ -624,10 +659,18 @@ then
     var String nightlightGroup = triggeringItem.getGroupNames.findFirst[ g | g.startsWith("gNightlight")];
     var GroupItem luminanceGroup = ScriptServiceUtil.getItemRegistry.getItem(nightlightGroup.replace('Sensor', 'Luminance'));
     var GroupItem lightsGroup    = ScriptServiceUtil.getItemRegistry.getItem(nightlightGroup.replace('Sensor', 'Light'));
+    
+    var Number luminanceResult = 100;
 
-    logInfo("nightlight", triggeringItem.name + " luminance map is " + luminanceGroup.members.map[ l|l.state as Number ].reduce[ sum, l|sum+l ])
+    try {
+        luminanceResult = luminanceGroup.members.map[ l|l.state as Number].reduce[sum, l|sum+l ]
+    }
+    catch (Throwable t) {
+        logError("nightlight", "failed to compute luminance via map/reduce, was something null? \n" + t.getMessage)
+    }
 
-    if (triggeringItem.state === ON && 5 > luminanceGroup.members.map[ l|l.state as Number].reduce[sum, l|sum+l ]) {
+    if (triggeringItem.state === ON && 5 > luminanceResult) {
+        logInfo("nightlight", triggeringItem.name)
         //automationLock.lock()
         try {
             isUpdateAutomatic = 1;
