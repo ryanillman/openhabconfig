@@ -83,7 +83,8 @@ val org.eclipse.xtext.xbase.lib.Functions$Function4<GenericItem, String, HashMap
     else if (reason=="goodnight"){
         retval = true; //goodnight is a wierd quaisi manual reason that can override basically anything
     }
-    else if (oldReason == "manual" && ! manualTimeExpired) {
+    //timers can overide manual (otherwise auto-off timers wouldn't work)
+    else if (oldReason == "manual" && ! manualTimeExpired && "timer" != reason) {
         retval = false;
     }
     else if (
@@ -148,6 +149,8 @@ then
     var String reasonList 
     
     try {
+        logInfo("gTrackStateReason", "gTrackStateReason: " + gTrackStateReason)
+        logInfo("gTrackStateReason", "gTrackStateReason.members.length: " + gTrackStateReason.members.length)
         reasonList = gTrackStateReason.members.sortBy[ name ].map[ i| 
             var lastState = if (lastStateReason.get(i.name) !== null) { lastStateReason.get(i.name) } else { "UNKNOWN"; }
             return String::format("%40s", i.name) + " => "+ lastState
@@ -155,7 +158,7 @@ then
     }
     catch (Throwable t) {
         reasonList = "shit blew up coming up with the list"
-        logError("gTrackStateReason", t.getMessage());
+        logError("gTrackStateReason", "Failed to generate reason list: " + t.getMessage());
     }
 
     vItemReasonList.postUpdate(reasonList)
@@ -180,11 +183,13 @@ then
         //automationLock.lock()
         try {
             isUpdateAutomatic = 1
-            logInfo("gAutoOff_60", "item " + item.name + " off timer expired, turning off");
-            item.sendCommand(OFF);
+            logInfo("gAutoOff_60", "item " + item.name + " off timer expired, turning off if allowed");
 
-            lastStateReason.put(item.name, REASON_TIMER);
-            lastStateDate.put(item.name, now.toString());
+            if (isOkToTurnOffBecause(item, REASON_TIMER, lastStateReason, lastStateDate)){
+                item.sendCommand(OFF);
+                lastStateReason.put(item.name, REASON_TIMER);
+                lastStateDate.put(item.name, now.toString());
+            }
 
             Thread.sleep(200); //guess to let things get caught up
         }
@@ -723,5 +728,86 @@ then
                 }
             ]))
         ]
+    }
+end
+
+rule "Extreme High Humidity Triggers Fans"
+when
+    Item MasterBathroom_RelativeHumidity changed
+then
+    //This rule does it's own current state checking so doesn't use the lambdas
+    //that compare state. REASON_HEALTH_SAFETY trumps all, and we wouldn't be
+    //able to clear it if we used the normal checks.
+
+    val Number humidity = MasterBathroom_RelativeHumidity.state as Number
+    val fanState = MasterBathroomFan_Switch.state
+    val fanStateReason = lastStateReason.get(MasterBathroomFan_Switch.name)
+
+    if (humidity > 80 && (fanState == OFF || fanStateReason != REASON_HEALTH_SAFETY) {
+        logWarn("bathroom high humidity", "Turning on bathroom fan due to extreme humidity");
+        isUpdateAutomatic = 1;
+
+        lastStateReason.put(MasterBathroomFan_Switch.name, REASON_HEALTH_SAFETY);
+        lastStateDate.put(MasterBathroomFan_Switch.name, now);
+        MasterBathroomFan_Switch.sendCommand(ON);
+
+        lastStateReason.put(BathroomHeater_Switch.name, REASON_HEALTH_SAFETY);
+        lastStateDate.put(BathroomHeater_Switch.name, now);
+        BathroomHeater_Switch.sendCommand(ON);
+
+        Thread.sleep(200);
+
+        isUpdateAutomatic = 0;
+    }
+    else if (humidity < 60 && fanState == ON && fanStateReason == REASON_HEALTH_SAFETY) {
+        logInfo("bathroom high humidity", "Humidity Cleared, turning off fan");
+        isUpdateAutomatic = 1; 
+
+        MasterBathroomFan_Switch.sendCommand(OFF);
+        lastStateReason.put(MasterBathroomFan_Switch.name, REASON_WEATHER); //something eles can override this
+        lastReasonDate.put(MasterBathroomFan_Switch.name, now);
+
+        lastStateReason.put(BathroomHeater_Switch.name, REASON_WEATHER);
+        lastStateDate.put(BathroomHeater_Switch.name, now);
+        BathroomHeater_Switch.sendCommand(OFF);
+
+        Thread.sleep(200);
+
+        isUpdateAutomatic = 0;
+    }
+end
+
+rule "High Humidity Triggers Fans"
+when
+    Item MasterBathroom_RelativeHumidity changed
+then
+    val Number humidity = MasterBathroom_RelativeHumidity.state as Number
+    val fanState = MasterBathroomFan_Switch.state
+    
+    if (humidity > 60 && fanState == OFF) {
+        isUpdateAutomatic = 1;
+
+        if (isOkToTurnOnBecause(MasterBathroomFan_Switch, REASON_WEATHER, lastStateReason, lastStateDate)){
+            lastStateReason.put(MasterBathroomFan_Switch.name, REASON_WEATHER);
+            lastStateDate.put(MasterBathroomFan_Switch.name, now);
+            MasterBathroomFan_Switch.sendCommand(ON);
+        }
+
+        Thread.sleep(200);
+
+        isUpdateAutomatic = 0;
+    }
+    else if (humidity < 55 && fanState == ON) {
+        isUpdateAutomatic = 1; 
+
+        if (isOkToTurnOffBecause(MasterBathroomFan_Switch, REASON_WEATHER, lastStateReason, lastStateDate)){
+            MasterBathroomFan_Switch.sendCommand(OFF);
+            lastStateReason.put(MasterBathroomFan_Switch.name, REASON_WEATHER);
+            lastReasonDate.put(MasterBathroomFan_Switch.name, now);
+        }
+
+        Thread.sleep(200);
+
+        isUpdateAutomatic = 0;
     }
 end
