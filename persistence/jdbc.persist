@@ -13,12 +13,8 @@ Items {
 	gVolume*    : strategy = everyChange, restoreOnStartup
 	gAudio*     : strategy = everyChange, restoreOnStartup
 
-	*Humidity   : strategy = everyChange, restoreOnStartup
-	*Luminance  : strategy = everyChange, restoreOnStartup
-	*Temperature: strategy = everyChange, restoreOnStartup
-
 	Weather*    : strategy = everyHour, restoreOnStartup
 
         // persist all items once a day and on every change and restore them from the db at startup
-	//* : strategy = everyChange, everyDay, restoreOnStartup
+	* : strategy = everyChange, everyDay, restoreOnStartup
 }

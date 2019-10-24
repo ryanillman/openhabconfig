@@ -5,7 +5,7 @@ Switch Scene_NightLights   "Night Lights"   (LightingScenes) [ "Switchable" ]
 Switch Scene_MovieLights   "Movie Lights"   (LightingScenes) [ "Switchable" ]
 Switch Scene_AllOn         "All Lights On"  (LightingScenes) [ "Switchable" ]
 Switch Scene_AllOff        "All Lights Off" (LightingScenes) [ "Switchable" ]
-
+ 
 
 
 Group gLivingroomBlinds

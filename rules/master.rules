@@ -141,7 +141,6 @@ then
         isUpdateAutomatic = 0;
     }
     else if (appearsToBeManual) {
-        logInfo("gTrackStateReason", "gTrackStateReason item " + triggeringItem.name + " changed in a non-automatic way: " + receivedCommand)
         lastStateReason.put(triggeringItem.name, REASON_MANUAL);
         lastStateDate.put(triggeringItem.name, now);
     }
@@ -149,12 +148,11 @@ then
     var String reasonList 
     
     try {
-        logInfo("gTrackStateReason", "gTrackStateReason: " + gTrackStateReason)
-        logInfo("gTrackStateReason", "gTrackStateReason.members.length: " + gTrackStateReason.members.length)
-        reasonList = gTrackStateReason.members.sortBy[ name ].map[ i| 
+        reasonList = gTrackStateReason.members.sortBy[ name ].map[ i|
+            if (i === null) { return ""; }
             var lastState = if (lastStateReason.get(i.name) !== null) { lastStateReason.get(i.name) } else { "UNKNOWN"; }
             return String::format("%40s", i.name) + " => "+ lastState
-        ].reduce[ list, i | return if (i !== null) {list + "\n" + i} else {list} ];
+        ].reduce[ list, i | return if (i !== null) {list + "\n" + i} else if (list !== null) {list} else {""}];
     }
     catch (Throwable t) {
         reasonList = "shit blew up coming up with the list"
@@ -174,16 +172,13 @@ then
     var existingTimer = autoOffTimers.get(triggeringItem.name);
 
     if (existingTimer !== null && ! existingTimer.hasTerminated) {
-        logInfo("gAutoOff_60", "item " + item.name + " alreday had a timer running, canceling");
         existingTimer.cancel();
     }
 
-    logInfo("gAutoOff_60", "item " + item.name + " turned on, setting an off timer");
     autoOffTimers.put(triggeringItem.name, createTimer(now.plusMinutes(60), [ |
         //automationLock.lock()
         try {
             isUpdateAutomatic = 1
-            logInfo("gAutoOff_60", "item " + item.name + " off timer expired, turning off if allowed");
 
             if (isOkToTurnOffBecause(item, REASON_TIMER, lastStateReason, lastStateDate)){
                 item.sendCommand(OFF);
@@ -365,7 +360,6 @@ then
   
   //the lights should come up to 'evening' level if the luminace gets below 30, or 
   //at 5pm, whichever comes first. but don't turn on after 9pm  for luminance
-    logInfo("eveninglights", "evening lights triggered --- hour:" + hour + "  luminance:" + luminance)
 
 
   if ((hour >= 17 && hour <= 18) || (luminance < 30 && hour > 13 && hour < 21)) {
@@ -375,13 +369,9 @@ then
         isUpdateAutomatic = 1;
 
         if (isOKToTurnOnBecause.apply(SofaTableLamps_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-            logInfo("eveninglights", "got OK to update the sofa table lamps!")
             SofaTableLamps_Dimmer.sendCommand(100);
             lastStateReason.put(SofaTableLamps_Dimmer.name, REASON_TIME);
             lastStateDate.put(SofaTableLamps_Dimmer.name, now);
-        }
-        else {
-            logInfo("eveninglights", "denied updating sofa lamps")
         }
 
         if (isOKToTurnOnBecause.apply(FloorLamps_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
@@ -476,7 +466,6 @@ then
 
         gGoodnightLights.members.forEach[ i | 
             if (isOKToTurnOffBecause.apply(i, REASON_GOODNIGHT, lastStateReason, lastStateDate)) {
-                logInfo("nigttime", "turning off item " + i.name + "for night, isUpdateAutomatic is " + isUpdateAutomatic)
                 i.sendCommand(OFF);
                 lastStateReason.put(i.name, REASON_GOODNIGHT);
                 lastStateDate.put(i.name, now);
@@ -759,7 +748,7 @@ then
 
         isUpdateAutomatic = 0;
     }
-    else if (humidity < 60 && fanState == ON && fanStateReason == REASON_HEALTH_SAFETY) {
+    else if (humidity < 60  && fanStateReason == REASON_HEALTH_SAFETY) {
         logInfo("bathroom high humidity", "Humidity Cleared, turning off fan");
         isUpdateAutomatic = 1; 
 
