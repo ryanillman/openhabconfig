@@ -1,5 +1,5 @@
 import java.util.HashMap
-import java.util.concurrent.locks.ReentrantLock
+//import java.util.concurrent.locks.ReentrantLock
 import org.eclipse.smarthome.model.script.ScriptServiceUtil
 
 
@@ -55,7 +55,7 @@ val org.eclipse.xtext.xbase.lib.Functions$Function4 <GenericItem, String, HashMa
     }
     //weather and timers can't overrrule goodnight (but time, motion and other can)
     else if (("weather" == reason || "timer" == reason) && oldReason =="goodnight") {
-        return false
+        retval = false;
     }
 
     retval
@@ -362,7 +362,7 @@ then
   //at 5pm, whichever comes first. but don't turn on after 9pm  for luminance
 
 
-  if ((hour >= 17 && hour <= 18) || (luminance < 30 && hour > 13 && hour < 21)) {
+  if ((hour >= 17 && hour <= 18) || (luminance < 40 && hour > 13 && hour < 21)) {
     logInfo("eveninglights", "go to do stuff! ")
     //automationLock.lock()
     try{
@@ -424,7 +424,7 @@ then
 
     logInfo("kitchen_evening", "kitchen evening lights triggered --- hour:" + hour + "  luminance:" + luminance)
 
-    if (((hour >= 17 && hour < 21) && luminance < 30) || hour == 17) {
+    if (((hour >= 17 && hour < 21) && luminance < 45) || hour == 17) {
         logInfo("kitchen_evening", "good to do stuff, time or luminance within thresholds")
         //automationLock.lock()
         try{
@@ -542,13 +542,12 @@ then
     try {
         isUpdateAutomatic = 1;
 
-        gBedroomBlinds.forEach [ b | 
+        gBedroomBlinds.members.forEach [ b | 
             if (isOKToTurnOnBecause.apply(b, REASON_TIME, lastStateReason, lastStateDate)) {
                 b.sendCommand(UP)
                 lastStateReason.put(b.name, REASON_TIME);
                 lastStateDate.put(b.name, now);
             }
-            true
         ]
 
         Thread.sleep(200);
@@ -663,22 +662,21 @@ then
         logError("nightlight", "failed to compute luminance via map/reduce, was something null? \n" + t.getMessage)
     }
 
-    if (triggeringItem.state === ON && 5 > luminanceResult) {
-        logInfo("nightlight", triggeringItem.name)
+    if (triggeringItem.state === ON && luminanceResult < 10) {
+        logInfo("nightlight", nightlightGroup + " triggered " + lightsGroup.name)
         //automationLock.lock()
         try {
             isUpdateAutomatic = 1;
 
 
             lightsGroup.members.forEach[ i |
-                if (isOKToTurnOnBecause(i, REASON_MOTION, lastStateReason, lastStateDate)) {
-                    i.sendCommand(if (i.type.toString == "Dimmer") 15 else ON)
+                if (isOKToTurnOnBecause.apply(i, REASON_MOTION, lastStateReason, lastStateDate)) {
+                    i.sendCommand(ON)
                     lastStateReason.put(i.name, REASON_MOTION)
                     lastStateDate.put(i.name, now)
                     autoOffTimers.put(i.name, null)
                 }
             ]
-
 
             Thread.sleep(200)
         }
@@ -701,7 +699,7 @@ then
                 //automationLock.lock();
                 isUpdateAutomatic = 1;
                 try{
-                    if (isOKToTurnOffBecause(i, REASON_MOTION, lastStateReason, lastStateDate)) {
+                    if (isOKToTurnOffBecause.apply(i, REASON_MOTION, lastStateReason, lastStateDate)) {
                         i.sendCommand(OFF)
                         lastStateReason.put(i.name, REASON_MOTION)
                         lastStateDate.put(i.name, now)
@@ -776,7 +774,7 @@ then
     if (humidity > 60 && fanState == OFF) {
         isUpdateAutomatic = 1;
 
-        if (isOKoToTurnOnBecause(MasterBathroomFan_Switch, REASON_WEATHER, lastStateReason, lastStateDate)){
+        if (isOKToTurnOnBecause.apply(MasterBathroomFan_Switch, REASON_WEATHER, lastStateReason, lastStateDate)){
             lastStateReason.put(MasterBathroomFan_Switch.name, REASON_WEATHER);
             lastStateDate.put(MasterBathroomFan_Switch.name, now);
             MasterBathroomFan_Switch.sendCommand(ON);
@@ -789,10 +787,10 @@ then
     else if (humidity < 55 && fanState == ON) {
         isUpdateAutomatic = 1; 
 
-        if (isOKToTurnOffBecause(MasterBathroomFan_Switch, REASON_WEATHER, lastStateReason, lastStateDate)){
+        if (isOKToTurnOffBecause.apply(MasterBathroomFan_Switch, REASON_WEATHER, lastStateReason, lastStateDate)){
             MasterBathroomFan_Switch.sendCommand(OFF);
             lastStateReason.put(MasterBathroomFan_Switch.name, REASON_WEATHER);
-            lastReasonDate.put(MasterBathroomFan_Switch.name, now);
+            lastStateDate.put(MasterBathroomFan_Switch.name, now);
         }
 
         Thread.sleep(200);

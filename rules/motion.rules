@@ -6,8 +6,9 @@ when
 then
   var int cloudiness =(LocalWeatherAndForecast_Current_Cloudiness.state as Number).intValue
   var int sunpos = (LocalSun_Position_Azimuth.state as Number).intValue
+  var int sunelv = (LocalSun_Position_Elevation.state as Number).intValue
 
-  if (sunpos > 122 && sunpos < 130 && cloudiness < 50) {
+  if (sunpos > 122 && sunpos < 130 && cloudiness < 50 && sunelv > 40) {
     logInfo("upstairs-blinds-sun-close.rule", "closing upstairs blinds to prevent the sun from coming in")
     RyansOfficeBlinds_Rollershutter.sendCommand(DOWN)
     StairwellBlinds_Rollershutter.sendCommand(DOWN)
