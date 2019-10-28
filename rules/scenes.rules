@@ -1,18 +1,4 @@
-rule "Lighting Scene Morning Lights"
-when
-   Item Scene_MorningLights received command ON
-then
-   SofaTableLamps_Dimmer.sendCommand(30)
-   FloorLamps_Dimmer.sendCommand(OFF)
-   MantleLight_Switch.sendCommand(OFF)
-   CouchLamps_Dimmer.sendCommand(40)
-   CurioCabinet_Dimmer.sendCommand(30)
 
-   CoffeeLight_Switch.sendCommand(ON)
-
-   Scene_MorningLights.sendCommand(OFF)
-end
-   
 
 rule "Lighting Scene Evening Lights"
 when
@@ -49,36 +35,13 @@ then
       DiningroomLights_Dimmer.sendCommand(15)
    }
 
+   if (BarLights_Dimmer.state as Number > 10) {
+      BarLights_Dimmer.sendCommand(25)
+   }
+
    Scene_MovieLights.sendCommand(OFF)
  end
 
-rule "Lighting Scene Night Lights"
-when
-   Item Scene_NightLights received command ON
-then
-   SofaTableLamps_Dimmer.sendCommand(OFF)
-   FloorLamps_Dimmer.sendCommand(OFF)
-   MantleLight_Switch.sendCommand(OFF)
-   CouchLamps_Dimmer.sendCommand(OFF)
-   CurioCabinet_Dimmer.sendCommand(OFF)
-
-   DiningroomLights_Dimmer.sendCommand(OFF)
-
-   BarLights_Dimmer.sendCommand(OFF)
-
-   KitchenSinkLights_Switch.sendCommand(OFF)
-
-   RyansDeskLamp_Dimmer.sendCommand(OFF)
-   RyansOtherDeskLamp_Dimmer.sendCommand(OFF)
-
-
-   gAllLights.sendCommand(OFF)
-   gAutoOff.sendCommand(OFF)
-
-   State_isNight.sendCommand(ON)
-   Scene_NightLights.sendCommand(OFF)
- end
-   
 
 rule "Lighting Scene All Lights Off"
 when

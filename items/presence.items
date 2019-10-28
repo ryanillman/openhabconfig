@@ -7,11 +7,11 @@ Group:Switch:AND(ON, OFF) EveryonePresent (gPresence)
 Group:Switch:OR(ON,OFF) RyanPresent (SomeonePresent, EvereyonePresent)
 
 Switch RyanInOwntracksRegion_Home "Ryans Phone is Home" <location> (RyanPresent) { channel="mqtt:topic:223026e8:Owntracks_Ryan_Home"}
-
+Switch ForceRyanPresent "Ryan Presence Override" <location> (RyanPresent)
 
 Group:Switch:OR(ON,OFF) CaitPresent (SomeonePresent, EveryonePresent)
 
 Switch CaitInOwntracksRegion_Home "Caits Phone is Home" <location> (CaitPresent) { channel="mqtt:topic:223026e8:Owntracks_Cait_home"}
-
+Switch ForceCaitPresent "Cait Presence Override" <location> (CaitPresent)
 
 
