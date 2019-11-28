@@ -13,6 +13,12 @@ val String REASON_TIMER         = "timer"
 val String REASON_OTHER         = "other"
 val String REASON_GOODNIGHT     = "goodnight"
 
+
+val String MOOD_NORMAL    = "normal"
+val String MOOD_MOVIE     = "movie"
+val String MOOD_COZY      = "cozy"
+val String MOOD_DARK      = "dark"
+
 val HashMap<String, String>   lastStateReason = newHashMap()
 val HashMap<String, DateTime> lastStateDate   = newHashMap()
 val HashMap<String, Timer>    autoOffTimers   = newHashMap()
@@ -91,7 +97,7 @@ val org.eclipse.xtext.xbase.lib.Functions$Function4<GenericItem, String, HashMap
         (reason == "weather" && (oldReason == "time")) ||
         (reason == "other" &&   (oldReason == "time" || oldReason == "weather")) ||
         (reason == "timer" &&   (oldReason == "time" || oldReason == "weather" || oldReason == "other")) ||
-        (reason == "motion" &&  (aoldReason == "time" || oldReason == "weather" || oldReason == "other" || oldReason == "timer"))
+        (reason == "motion" &&  (oldReason == "time" || oldReason == "weather" || oldReason == "other" || oldReason == "timer"))
         )
     {
         retval = false;
@@ -180,11 +186,9 @@ then
         try {
             isUpdateAutomatic = 1
 
-            if (isOkToTurnOffBecause(item, REASON_TIMER, lastStateReason, lastStateDate)){
-                item.sendCommand(OFF);
-                lastStateReason.put(item.name, REASON_TIMER);
-                lastStateDate.put(item.name, now.toString());
-            }
+            item.sendCommand(OFF);
+            lastStateReason.put(item.name, REASON_TIMER);
+            lastStateDate.put(item.name, now.toString());
 
             Thread.sleep(200); //guess to let things get caught up
         }
@@ -225,11 +229,9 @@ then
 
     if ((luminance < 10 || elevation < 3) && vIsLightOut.state == ON) {
         vIsLightOut.postUpdate(OFF)
-        logInfo("vIsLightOut", "vIsLightOut updated to off. luminance: " + luminance + " sun elevation:" + elevation)
     }
     else if ((luminance > 20 && elevation > 10) && vIsLightOut.state == OFF) {
         vIsLightOut.postUpdate(ON)
-        logInfo("vIsLightOut", "vIsLightOut updated to on. luminance: " + luminance + " sun elevation:" + elevation)
     }
 end
 
@@ -242,66 +244,48 @@ end
 rule "Morning Lights on weekday & weekend"
 when
   Time cron "0 0 6 ? * MON-FRI" or
-  Time cron "0 30 7 ? * SAT,SUN" or
-  Item Scene_MorningLights received command ON
+  Time cron "0 30 7 ? * SAT,SUN"
 then
-    logInfo("morning_lights", "morning lights triggered");
     //automationLock.lock();
     try{
         isUpdateAutomatic = 1;
 
-        if (now.getDayOfWeek < 6) {
-            if (isOKToTurnOnBecause.apply(RyansDeskLamp_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-                RyansDeskLamp_Dimmer.sendCommand(ON);
-                lastStateReason.put(RyansDeskLamp_Dimmer.name, REASON_TIME);
-                lastStateDate.put(RyansDeskLamp_Dimmer.name, now);
-            }
-
-            if (isOKToTurnOnBecause.apply(RyansOtherDeskLamp_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-                RyansOtherDeskLamp_Dimmer.sendCommand(ON);
-                lastStateReason.put(RyansOtherDeskLamp_Dimmer.name, REASON_TIME);
-                lastStateDate.put(RyansOtherDeskLamp_Dimmer.name, now);
-            }
-        }
-
-
-        if (isOKToTurnOnBecause.apply(SofaTableLamps_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-            SofaTableLamps_Dimmer.sendCommand(40);
-            lastStateReason.put(SofaTableLamps_Dimmer.name, REASON_TIME);
-            lastStateDate.put(SofaTableLamps_Dimmer.name, now);
-        }
-
-        if (isOKToTurnOffBecause.apply(FloorLamps_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-            FloorLamps_Dimmer.sendCommand(OFF);
-            lastStateReason.put(FloorLamps_Dimmer.name, REASON_TIME);
-            lastStateDate.put(FloorLamps_Dimmer.name, now);
-        }
-
-        if (isOKToTurnOffBecause.apply(MantleLight_Switch, REASON_TIME, lastStateReason, lastStateDate)){
-            MantleLight_Switch.sendCommand(OFF);
-            lastStateReason.put(MantleLight_Switch.name, REASON_TIME);
-            lastStateDate.put(MantleLight_Switch.name, now);
-        }
-
-        if (isOKToTurnOnBecause.apply(CouchLamps_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-            CouchLamps_Dimmer.sendCommand(40);
-            lastStateReason.put(CouchLamps_Dimmer.name, REASON_TIME);
-            lastStateDate.put(CouchLamps_Dimmer.name, now);
-        }
-
-        if (isOKToTurnOnBecause.apply(CurioCabinet_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-            CurioCabinet_Dimmer.sendCommand(30);
-            lastStateReason.put(CurioCabinet_Dimmer.name, REASON_TIME);
-            lastStateDate.put(CurioCabinet_Dimmer.name, now);
-        }
-
-        if (isOKToTurnOnBecause.apply(CoffeeLight_Switch, REASON_TIME, lastStateReason, lastStateDate)){
-            CoffeeLight_Switch.sendCommand(ON);
-            lastStateReason.put(CoffeeLight_Switch.name, REASON_TIME);
-            lastStateDate.put(CoffeeLight_Switch.name, now);
-        }
+        if (now.getDayOfWeek < 6) {         
+            RyansDeskLamp_Dimmer.sendCommand(ON);
+            lastStateReason.put(RyansDeskLamp_Dimmer.name, REASON_TIME);
+            lastStateDate.put(RyansDeskLamp_Dimmer.name, now);
         
+        
+            RyansOtherDeskLamp_Dimmer.sendCommand(ON);
+            lastStateReason.put(RyansOtherDeskLamp_Dimmer.name, REASON_TIME);
+            lastStateDate.put(RyansOtherDeskLamp_Dimmer.name, now);   
+        }
 
+       
+        SofaTableLamps_Dimmer.sendCommand(40);
+        lastStateReason.put(SofaTableLamps_Dimmer.name, REASON_TIME);
+        lastStateDate.put(SofaTableLamps_Dimmer.name, now);
+    
+        FloorLamps_Dimmer.sendCommand(OFF);
+        lastStateReason.put(FloorLamps_Dimmer.name, REASON_TIME);
+        lastStateDate.put(FloorLamps_Dimmer.name, now);
+    
+        CouchLamps_Dimmer.sendCommand(40);
+        lastStateReason.put(CouchLamps_Dimmer.name, REASON_TIME);
+        lastStateDate.put(CouchLamps_Dimmer.name, now);
+        
+        CurioCabinet_Dimmer.sendCommand(30);
+        lastStateReason.put(CurioCabinet_Dimmer.name, REASON_TIME);
+        lastStateDate.put(CurioCabinet_Dimmer.name, now);
+    
+        CoffeeLight_Switch.sendCommand(ON);
+        lastStateReason.put(CoffeeLight_Switch.name, REASON_TIME);
+        lastStateDate.put(CoffeeLight_Switch.name, now);
+
+
+        //this is the dailiy reset of the "Mood"
+        vLivingroomMood.postUpdate(MOOD_NORMAL);
+        
         Thread.sleep(200); //let everything catch up before turning off automatic updates
     }
     catch (Throwable t) {
@@ -321,7 +305,6 @@ when
   Time cron "0 0 12 ? * * "  or
   Time cron "0 0 13 ? * * "
 then
-    logInfo("DrinkingTime", "It's drinking time!")
     //automationLock.lock()
     try {
         isUpdateAutomatic = 1;
@@ -350,10 +333,11 @@ then
 end
 
 
-rule "Livingroom Evening Lights on"
+rule "Livingroom Evening Lights on AKA set Mood"
 when
   Time cron "0 0 17 ? * * " or
-  Item LivingRoomMultisensor_SensorLuminance received update
+  Item LivingRoomMultisensor_SensorLuminance changed or
+  Item vLivingroomMood changed
 then
   var Number hour = now.getHourOfDay()
   var Number luminance = LivingRoomMultisensor_SensorLuminance.state as Number;
@@ -361,42 +345,101 @@ then
   //the lights should come up to 'evening' level if the luminace gets below 30, or 
   //at 5pm, whichever comes first. but don't turn on after 9pm  for luminance
 
+  var changeIsByMoodChange = triggeringItem === vLivingroomMood;
+  var reason = if (changeIsByMoodChange) { REASON_OTHER } else if (triggeringItem===LivingRoomMultisensor_SensorLuminance) {REASON_WEATHER} else { REASON_TIME };
+  var sofa_level  = 100;
+  var floor_level = 100;
+  var mantle_level= ON;
+  var couch_level = 100;
+  var curio_level = 100;
 
-  if ((hour >= 17 && hour <= 18) || (luminance < 40 && hour > 13 && hour < 21)) {
-    logInfo("eveninglights", "go to do stuff! ")
+  switch vLivingroomMood.state {
+      case MOOD_NORMAL: {
+        sofa_level  = 100;
+        floor_level = 100;
+        mantle_level= ON;
+        couch_level = 100;
+        curio_level = 100;
+        }
+      case MOOD_MOVIE: {
+        sofa_level  = 20;
+        floor_level = 0;
+        mantle_level= OFF;
+        couch_level = 15;
+        curio_level = 15;
+        }
+      case MOOD_COZY: {
+        sofa_level  = 20;
+        floor_level = 20;
+        mantle_level= OFF;
+        couch_level = 15;
+        curio_level = 40;
+      }
+      case MOOD_DARK: {
+        sofa_level  = 0;
+        floor_level = 0;
+        mantle_level= OFF;
+        couch_level = 0;
+        curio_level = 0;
+      }  
+  }
+
+
+  if ((hour >= 17 && hour <= 18) || (luminance < 40 && hour > 13 && hour < 21) || changeIsByMoodChange) {
     //automationLock.lock()
     try{
         isUpdateAutomatic = 1;
 
-        if (isOKToTurnOnBecause.apply(SofaTableLamps_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-            SofaTableLamps_Dimmer.sendCommand(100);
-            lastStateReason.put(SofaTableLamps_Dimmer.name, REASON_TIME);
+        if (isOKToTurnOnBecause.apply(SofaTableLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsByMoodChange){
+            SofaTableLamps_Dimmer.sendCommand(sofa_level);
+            lastStateReason.put(SofaTableLamps_Dimmer.name, reason);
             lastStateDate.put(SofaTableLamps_Dimmer.name, now);
         }
 
-        if (isOKToTurnOnBecause.apply(FloorLamps_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-            FloorLamps_Dimmer.sendCommand(100);
-            lastStateReason.put(FloorLamps_Dimmer.name, REASON_TIME);
+        if (isOKToTurnOnBecause.apply(FloorLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsByMoodChange){
+            FloorLamps_Dimmer.sendCommand(floor_level);
+            lastStateReason.put(FloorLamps_Dimmer.name, reason);
             lastStateDate.put(FloorLamps_Dimmer.name, now);
         }
 
-        if (isOKToTurnOnBecause.apply(MantleLight_Switch, REASON_TIME, lastStateReason, lastStateDate)){
-            MantleLight_Switch.sendCommand(ON);
-            lastStateReason.put(MantleLight_Switch.name, REASON_TIME);
+        if (isOKToTurnOnBecause.apply(MantleLight_Switch, reason, lastStateReason, lastStateDate) || changeIsByMoodChange){
+            MantleLight_Switch.sendCommand(mantle_level);
+            lastStateReason.put(MantleLight_Switch.name, reason);
             lastStateDate.put(MantleLight_Switch.name, now);
         }
 
-        if (isOKToTurnOnBecause.apply(CouchLamps_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-            CouchLamps_Dimmer.sendCommand(100);
-            lastStateReason.put(CouchLamps_Dimmer.name, REASON_TIME);
+        if (isOKToTurnOnBecause.apply(CouchLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsByMoodChange){
+            CouchLamps_Dimmer.sendCommand(couch_level);
+            lastStateReason.put(CouchLamps_Dimmer.name, reason);
             lastStateDate.put(CouchLamps_Dimmer.name, now);
         }
 
-        if (isOKToTurnOnBecause.apply(CurioCabinet_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-            CurioCabinet_Dimmer.sendCommand(100);
-            lastStateReason.put(CurioCabinet_Dimmer.name, REASON_TIME);
+        if (isOKToTurnOnBecause.apply(CurioCabinet_Dimmer, reason, lastStateReason, lastStateDate) || changeIsByMoodChange){
+            CurioCabinet_Dimmer.sendCommand(curio_level);
+            lastStateReason.put(CurioCabinet_Dimmer.name, reason);
             lastStateDate.put(CurioCabinet_Dimmer.name, now);
         }
+
+        if (changeIsByMoodChange && vLivingroomMood.state == MOOD_MOVIE) {
+            //normally these items aren't controlled by the livingroom, but they're
+            //in view and can be annoying while watching TV
+            //since they don't participate in the scene, we'll set their status to manual
+            //so they don't come back up on their own for a while.
+            logInfo("movie_scene.rules", "Movie time is triggering, checking diningroom light state: "  + (DiningroomLights_Dimmer.state as Number).toString);
+
+            if (DiningroomLights_Dimmer.state as Number > 20) {
+                logInfo("Diningroom Lights were over 20")
+                DiningroomLights_Dimmer.sendCommand(15);
+                lastStateReason.put(DiningroomLights_Dimmer.name, REASON_MANUAL);
+                lastStateDate.put(DiningroomLights_Dimmer.name, now);
+            }
+
+            if (BarLights_Dimmer.state as Number > 10) {
+                BarLights_Dimmer.sendCommand(25);
+                lastStateReason.put(BarLights_Dimmer.name, REASON_MANUAL);
+                lastStateDate.put(BarLights_Dimmer.name, now);
+            }
+        } 
 
         Thread.sleep(200); //let everything catch up before turning off automatic updates
     }
@@ -414,7 +457,7 @@ end
 rule "Kitchen Evening Lights On"
 when
     Time cron "0 0 17 ? * *" or
-    Item KitchenMultisensor_SensorLuminance received update
+    Item KitchenMultisensor_SensorLuminance changed
 then
     //the lights should come up to 'evening' level if the luminace gets below 30, or 
     //at 5pm, whichever comes first
@@ -422,10 +465,7 @@ then
     var Number hour = now.getHourOfDay()
     var Number luminance = KitchenMultisensor_SensorLuminance.state as Number;
 
-    logInfo("kitchen_evening", "kitchen evening lights triggered --- hour:" + hour + "  luminance:" + luminance)
-
-    if (((hour >= 17 && hour < 21) && luminance < 45) || hour == 17) {
-        logInfo("kitchen_evening", "good to do stuff, time or luminance within thresholds")
+    if (((hour >= 14 && hour < 21) && luminance < 45) || hour == 17) {
         //automationLock.lock()
         try{
             isUpdateAutomatic = 1;
@@ -466,6 +506,12 @@ then
 
         gGoodnightLights.members.forEach[ i | 
             if (isOKToTurnOffBecause.apply(i, REASON_GOODNIGHT, lastStateReason, lastStateDate)) {
+                if (i instanceof DimmerItem /*&& OFF !== i.state && 0 !== i.state*/) {
+                    //it's a dimmer, and it's on - we'll set the dim level super low before turning it off
+                    //so that when nighlights turn on they're not too bright
+                    i.sendCommand(15)
+                }
+
                 i.sendCommand(OFF);
                 lastStateReason.put(i.name, REASON_GOODNIGHT);
                 lastStateDate.put(i.name, now);
@@ -503,8 +549,6 @@ then
     if (triggeringItem !== null && triggeringItem.name == "vIsLightOut") {
         ourreason = REASON_WEATHER;
     }
-
-    logInfo("non-bedroom blinds", "Non bedroom blinds triggered by " + ourreason)
 
     //automationLock.lock()
     try {
@@ -572,8 +616,6 @@ then
     if (triggeringItem !== null && triggeringItem.name == "vIsLightOut") {
         ourreason = REASON_WEATHER;
     }
-
-    logInfo("blinds close", "Blinds close triggered by " + ourreason)
 
     //automationLock.lock()
     try {
@@ -663,7 +705,6 @@ then
     }
 
     if (triggeringItem.state === ON && luminanceResult < 10) {
-        logInfo("nightlight", nightlightGroup + " triggered " + lightsGroup.name)
         //automationLock.lock()
         try {
             isUpdateAutomatic = 1;
@@ -707,7 +748,7 @@ then
                     }
                 }
                 catch(Throwable t) {
-                    logWarn("nightlight on", t.getMessage())
+                    logWarn("nightlight off", t.getMessage())
                 }
                 finally{
                     isUpdateAutomatic = 0;
@@ -729,6 +770,7 @@ then
     val Number humidity = MasterBathroom_RelativeHumidity.state as Number
     val fanState = MasterBathroomFan_Switch.state
     val fanStateReason = lastStateReason.get(MasterBathroomFan_Switch.name)
+    val heaterStateReason = lastStateReason.get(BathroomHeater_Switch.name)
 
     if (humidity > 80 && (fanState == OFF || fanStateReason != REASON_HEALTH_SAFETY)) {
         logWarn("bathroom high humidity", "Turning on bathroom fan due to extreme humidity");
@@ -746,13 +788,13 @@ then
 
         isUpdateAutomatic = 0;
     }
-    else if (humidity < 60  && fanStateReason == REASON_HEALTH_SAFETY) {
+    else if (humidity < 60  && (fanStateReason == REASON_HEALTH_SAFETY || heaterStateReason == REASON_HEALTH_SAFETY)) {
         logInfo("bathroom high humidity", "Humidity Cleared, turning off fan");
         isUpdateAutomatic = 1; 
 
         MasterBathroomFan_Switch.sendCommand(OFF);
         lastStateReason.put(MasterBathroomFan_Switch.name, REASON_WEATHER); //something eles can override this
-        lastReasonDate.put(MasterBathroomFan_Switch.name, now);
+        lastStateDate.put(MasterBathroomFan_Switch.name, now);
 
         lastStateReason.put(BathroomHeater_Switch.name, REASON_WEATHER);
         lastStateDate.put(BathroomHeater_Switch.name, now);
