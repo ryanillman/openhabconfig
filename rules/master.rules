@@ -15,6 +15,7 @@ val String REASON_GOODNIGHT     = "goodnight"
 
 
 val String MOOD_NORMAL    = "normal"
+val String MOOD_TV        = "tv"
 val String MOOD_MOVIE     = "movie"
 val String MOOD_COZY      = "cozy"
 val String MOOD_DARK      = "dark"
@@ -250,6 +251,9 @@ then
     try{
         isUpdateAutomatic = 1;
 
+        //this is the dailiy reset of the "Mood"
+        vLivingroomMood.postUpdate(MOOD_NORMAL);
+
         if (now.getDayOfWeek < 6) {         
             RyansDeskLamp_Dimmer.sendCommand(ON);
             lastStateReason.put(RyansDeskLamp_Dimmer.name, REASON_TIME);
@@ -283,9 +287,11 @@ then
         lastStateDate.put(CoffeeLight_Switch.name, now);
 
 
-        //this is the dailiy reset of the "Mood"
-        vLivingroomMood.postUpdate(MOOD_NORMAL);
-        
+        XMasTree_Switch.sendCommand(ON);
+        lastStateReason.put(XMasTree_Switch.name, REASON_TIME);
+        lastStateReason.put(XMasTree_Switch.name, now);
+
+               
         Thread.sleep(200); //let everything catch up before turning off automatic updates
     }
     catch (Throwable t) {
@@ -352,6 +358,8 @@ then
   var mantle_level= ON;
   var couch_level = 100;
   var curio_level = 100;
+  var xmas_tree   = ON;
+
 
   switch vLivingroomMood.state {
       case MOOD_NORMAL: {
@@ -361,12 +369,20 @@ then
         couch_level = 100;
         curio_level = 100;
         }
-      case MOOD_MOVIE: {
+      case MOOD_TV: {
         sofa_level  = 20;
         floor_level = 0;
         mantle_level= OFF;
         couch_level = 15;
         curio_level = 15;
+        }
+      case MOOD_MOVIE: {
+        sofa_level  = 12;
+        floor_level = 0;
+        mantle_level= OFF;
+        couch_level = 0;
+        curio_level = 0;
+        xmas_tree   = OFF;
         }
       case MOOD_COZY: {
         sofa_level  = 20;
@@ -381,6 +397,7 @@ then
         mantle_level= OFF;
         couch_level = 0;
         curio_level = 0;
+        xmas_tree   = OFF;
       }  
   }
 
@@ -419,6 +436,14 @@ then
             lastStateReason.put(CurioCabinet_Dimmer.name, reason);
             lastStateDate.put(CurioCabinet_Dimmer.name, now);
         }
+
+        if (isOKToTurnOnBecause.apply(XMasTree_Switch, reason, lastStateReason, lastStateDate) || changeIsByMoodChange){
+            XMasTree_Switch.sendCommand(xmas_tree);
+            lastStateReason.put(XMasTree_Switch.name, reason);
+            lastStateDate.put(XMasTree_Switch.name, now);
+        }
+
+
 
         if (changeIsByMoodChange && vLivingroomMood.state == MOOD_MOVIE) {
             //normally these items aren't controlled by the livingroom, but they're
@@ -511,6 +536,8 @@ then
                     //so that when nighlights turn on they're not too bright
                     i.sendCommand(15)
                 }
+
+		Thread.sleep(100); //hopefully enough time to let the change actuall propagate out
 
                 i.sendCommand(OFF);
                 lastStateReason.put(i.name, REASON_GOODNIGHT);
