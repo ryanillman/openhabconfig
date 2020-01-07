@@ -57,8 +57,8 @@ Switch vIsLightOut "Its Light Out" <light> (gGlobalStates)
 
 String vItemReasonList "Item State Reason List"
 
-String vLivingroomMood  "Livingroom Lighting Scene Autoselector"
-String vLivingroomScene "Livingroom Lighting Scene"
+String vLivingroomMood  "Livingroom Lighting Mood/Color" (gTrackStateReason)
+String vLivingroomScene "Livingroom Lighting Scene" (gTrackStateReason)
 
 
 String CalMachias_NextEventName "Next Event Name"     <calendar> { caldavPersonal="calendar:machias type:UPCOMING eventNr:1 value:NAME"}

@@ -14,11 +14,25 @@ val String REASON_OTHER         = "other"
 val String REASON_GOODNIGHT     = "goodnight"
 
 
-val String MOOD_NORMAL    = "normal"
-val String MOOD_TV        = "tv"
-val String MOOD_MOVIE     = "movie"
-val String MOOD_COZY      = "cozy"
-val String MOOD_DARK      = "dark"
+val String SCENE_MORNING   = "morning"
+val String SCENE_NORMAL    = "normal"
+val String SCENE_TV        = "tv"
+val String SCENE_MOVIE     = "movie"
+val String SCENE_COZY      = "cozy"
+val String SCENE_DARK      = "dark"
+
+
+val String MOOD_MORNING        = "morning"
+val String MOOD_AFTERNOON      = "afternoon"
+val String MOOD_EARLY_EVENING  = "early_evening"
+val String MOOD_MID_EVENING    = "mid_evening"
+val String MOOD_LATE_EVENING   = "late_evening"
+val String MOOD_BEDTIME        = "bedtime"
+val String MOOD_COZY           = "cozy"
+val String MOOD_CHIPPER        = "chipper"
+val String MOOD_FESTIVE_XMAS   = "xmas"
+val String MOOD_FESTIVE_STP    = "stpatricks"
+val String MOOD_FESTIVE_JULY4  = "july4"
 
 val HashMap<String, String>   lastStateReason = newHashMap()
 val HashMap<String, DateTime> lastStateDate   = newHashMap()
@@ -163,7 +177,7 @@ then
     }
     catch (Throwable t) {
         reasonList = "shit blew up coming up with the list"
-        logError("gTrackStateReason", "Failed to generate reason list: " + t.getMessage());
+        //logError("gTrackStateReason", "Failed to generate reason list: " + t.getMessage());
     }
 
     vItemReasonList.postUpdate(reasonList)
@@ -251,45 +265,24 @@ then
     try{
         isUpdateAutomatic = 1;
 
-        //this is the dailiy reset of the "Mood"
-        vLivingroomMood.postUpdate(MOOD_NORMAL);
+        //this is the dailiy reset of the "Scene"
+        vLivingroomScene.postUpdate(SCENE_MORNING);
+
 
         if (now.getDayOfWeek < 6) {         
-            RyansDeskLamp_Dimmer.sendCommand(ON);
+            RyansDeskLamp_Dimmer.sendCommand(40);
             lastStateReason.put(RyansDeskLamp_Dimmer.name, REASON_TIME);
             lastStateDate.put(RyansDeskLamp_Dimmer.name, now);
         
         
-            RyansOtherDeskLamp_Dimmer.sendCommand(ON);
+            RyansOtherDeskLamp_Dimmer.sendCommand(100);
             lastStateReason.put(RyansOtherDeskLamp_Dimmer.name, REASON_TIME);
             lastStateDate.put(RyansOtherDeskLamp_Dimmer.name, now);   
         }
 
-       
-        SofaTableLamps_Dimmer.sendCommand(40);
-        lastStateReason.put(SofaTableLamps_Dimmer.name, REASON_TIME);
-        lastStateDate.put(SofaTableLamps_Dimmer.name, now);
-    
-        FloorLamps_Dimmer.sendCommand(OFF);
-        lastStateReason.put(FloorLamps_Dimmer.name, REASON_TIME);
-        lastStateDate.put(FloorLamps_Dimmer.name, now);
-    
-        CouchLamps_Dimmer.sendCommand(40);
-        lastStateReason.put(CouchLamps_Dimmer.name, REASON_TIME);
-        lastStateDate.put(CouchLamps_Dimmer.name, now);
-        
-        CurioCabinet_Dimmer.sendCommand(30);
-        lastStateReason.put(CurioCabinet_Dimmer.name, REASON_TIME);
-        lastStateDate.put(CurioCabinet_Dimmer.name, now);
-    
         CoffeeLight_Switch.sendCommand(ON);
         lastStateReason.put(CoffeeLight_Switch.name, REASON_TIME);
         lastStateDate.put(CoffeeLight_Switch.name, now);
-
-
-        XMasTree_Switch.sendCommand(ON);
-        lastStateReason.put(XMasTree_Switch.name, REASON_TIME);
-        lastStateReason.put(XMasTree_Switch.name, now);
 
                
         Thread.sleep(200); //let everything catch up before turning off automatic updates
@@ -338,114 +331,260 @@ then
     }
 end
 
-
-rule "Livingroom Evening Lights on AKA set Mood"
+rule "Livingroom Mood Manager"
 when
-  Time cron "0 0 17 ? * * " or
-  Item LivingRoomMultisensor_SensorLuminance changed or
-  Item vLivingroomMood changed
+    System started or
+    Time cron "0 */10 * ? * *"
 then
-  var Number hour = now.getHourOfDay()
-  var Number luminance = LivingRoomMultisensor_SensorLuminance.state as Number;
-  
-  //the lights should come up to 'evening' level if the luminace gets below 30, or 
-  //at 5pm, whichever comes first. but don't turn on after 9pm  for luminance
+    var String currentMood = vLivingroomMood.state;
+    var Number hour = 21//now.getHourOfDay();
+    var boolean isWorkNight = now.getDayOfWeek != 5 && now.getDayOfWeek != 6;
+    var String newMood = null;
 
-  var changeIsByMoodChange = triggeringItem === vLivingroomMood;
-  var reason = if (changeIsByMoodChange) { REASON_OTHER } else if (triggeringItem===LivingRoomMultisensor_SensorLuminance) {REASON_WEATHER} else { REASON_TIME };
+
+    if (now.getMonthOfYear == 12 && now.getDayOfMonth==25) {
+        newMood = MOOD_FESTIVE_XMAS;
+    }
+    else if (now.getMonthOfYear == 3 && now.getDayOfMonth==17) {
+        newMood = MOOD_FESTIVE_STP;
+    }
+    else if (now.getMonthOfYear == 7 && now.getDayOfMonth==4) {
+        newMood = MOOD_FESTIVE_JULY4;
+    }
+    else if (hour == 4) {
+        newMood = MOOD_MORNING;
+    }    
+    else if (12 == hour) {
+        newMood = MOOD_AFTERNOON;
+    }
+    else if (16 == hour) {
+        newMood = MOOD_EARLY_EVENING;
+    }
+    else if (18 == hour) {
+        newMood = MOOD_MID_EVENING;
+    }
+    else if ((20 == hour && isWorkNight) || (21 == hour && ! isWorkNight)) {
+        newMood = MOOD_LATE_EVENING;
+    }
+    else if ((21 == hour && isWorkNight) || (23 == hour)) {
+        newMood = MOOD_BEDTIME;
+    } 
+
+
+    if (newMood !== null) {
+        try{
+            isUpdateAutomatic = 1;
+
+            if (isOKToTurnOnBecause.apply(vLivingroomMood, REASON_TIME, lastStateReason, lastStateDate)){
+                logInfo("mood_manager", "new mood applied " + newMood);
+                vLivingroomMood.postUpdate(newMood);
+                lastStateReason.put(BarLights_Dimmer.name, REASON_TIME);
+                lastStateDate.put(BarLights_Dimmer.name, now);
+            }
+            else {
+                logInfo("mood_manager", "mood change BLOCKED! would have done " + newMood + "but "+currentMood + " was set manually");
+            }
+
+            Thread.sleep(200); //let everything catch up before turning off automatic updates
+        }
+        catch (Throwable t) {
+            logError("mood_manager", t.getMessage())
+        }
+        finally {
+            isUpdateAutomatic = 0;
+        }
+    }
+end
+
+rule "Livingroom auto scene transitions"
+when 
+    Time cron "0 0 17 ? * * " or
+    Time cron "0 0 21 ? * * " or
+    Item LivingRoomMultisensor_SensorLuminance changed
+then
+    //the lights should come up to 'evening' level if the luminace gets below 30, or 
+    //at 5pm, whichever comes first. but don't turn on after 9pm  for luminance
+    
+    var Number hour = null;
+    var Number luminance = null;
+
+    try {
+        hour = now.getHourOfDay();
+        if (null !== LivingRoomMultisensor_SensorLuminance.state){
+            luminance = LivingRoomMultisensor_SensorLuminance.state as Number;
+        }
+        else {
+            luminance = 50;
+        }
+    }
+    catch(Throwable ex) {
+        if (null === luminace) {luminance = 50;}
+    }
+
+    if ((hour >= 17 && hour <= 18) || (luminance < 40 && hour > 13 && hour < 21)) {
+        if (isOKToTurnOnBecause.apply(vLivingroomScene, REASON_TIME, lastStateReason, lastStateDate)){
+            vLivingroomScene.postUpdate(SCENE_NORMAL);
+            lastStateReason.put(vLivingroomScene.name, REASON_TIME);
+            lastStateDate.put(vLivingroomScene.name, now);
+        }
+    }
+    else if (hour >= 21) {
+        if (isOKToTurnOnBecause.apply(vLivingroomScene, REASON_TIME, lastStateReason, lastStateDate)){
+            vLivingroomScene.postUpdate(SCENE_COZY);
+            lastStateReason.put(vLivingroomScene.name, REASON_TIME);
+            lastStateDate.put(vLivingroomScene.name, now);
+        }
+    }
+end
+
+rule "Livingroom set Scene"
+when
+  System started or
+  Item vLivingroomScene changed
+then
   var sofa_level  = 100;
-  var floor_level = 100;
-  var mantle_level= ON;
+  var floor_level = 100;  
+  var mantle_level = ON;
   var couch_level = 100;
+  var couch1_level = 100;
+  var couch2_level = 100;
+  var couch3_level = 100;
   var curio_level = 100;
-  var xmas_tree   = ON;
 
+  var reason;
 
-  switch vLivingroomMood.state {
-      case MOOD_NORMAL: {
-        sofa_level  = 100;
-        floor_level = 100;
-        mantle_level= ON;
-        couch_level = 100;
-        curio_level = 100;
-        }
-      case MOOD_TV: {
-        sofa_level  = 20;
-        floor_level = 0;
-        mantle_level= OFF;
-        couch_level = 15;
-        curio_level = 15;
-        }
-      case MOOD_MOVIE: {
-        sofa_level  = 12;
-        floor_level = 0;
-        mantle_level= OFF;
-        couch_level = 0;
-        curio_level = 0;
-        xmas_tree   = OFF;
-        }
-      case MOOD_COZY: {
-        sofa_level  = 20;
-        floor_level = 20;
-        mantle_level= OFF;
-        couch_level = 15;
-        curio_level = 40;
-      }
-      case MOOD_DARK: {
-        sofa_level  = 0;
-        floor_level = 0;
-        mantle_level= OFF;
-        couch_level = 0;
-        curio_level = 0;
-        xmas_tree   = OFF;
-      }  
+  if (null !== lastStateReason.get(vLivingroomScene.name)) {
+      reason = lastStateReason.get(vLivingroomScene.name);
+      logInfo("livingroom_scene", "found vLivingroomScene reason " + reason + ", stealing it");
+  }
+  else {
+      reason = REASON_TIME;
+      logError("livingroom_scene", "failed to find vLivingroomScene reason, going with time 'cause why not");
   }
 
+  var changeIsBySceneChange = true;
 
-  if ((hour >= 17 && hour <= 18) || (luminance < 40 && hour > 13 && hour < 21) || changeIsByMoodChange) {
+
+    switch vLivingroomScene.state {
+        case SCENE_NORMAL: {
+            sofa_level  = 100;
+            floor_level = 100;
+            mantle_level = ON;
+            curio_level = 100;
+        }
+        case SCENE_MORNING: {
+            sofa_level  = 18;
+            floor_level = 15;
+            mantle_level = OFF;
+            couch_level = 20;
+            couch1_level = 20;
+            couch2_level = 20;
+            couch3_level = 20;
+            curio_level = 30;
+        } 
+        case SCENE_TV: {
+            sofa_level  = 18;
+            floor_level = 15;
+            mantle_level = OFF;
+            couch_level = 15;
+            couch1_level = 5;
+            couch2_level = 5;
+            couch3_level = OFF;
+            curio_level = 15;
+        }
+        case SCENE_MOVIE: {
+            sofa_level  = 12;
+            floor_level = 0;
+            mantle_level = OFF;
+            couch_level = 0;
+            couch1_level = 0;
+            couch2_level = 0;
+            couch3_level = 0;
+            curio_level = 0;
+        }
+        case SCENE_COZY: {
+            sofa_level  = 20;
+            floor_level = 20;
+            mantle_level = OFF;
+            couch_level = 15;
+            couch1_level = 15;
+            couch2_level = 15;
+            couch3_level = 15;
+            curio_level = 5;
+        }
+        case SCENE_DARK: {
+            sofa_level  = 0;
+            floor_level = 0;
+            mantle_level= OFF;
+            couch_level = 0;
+            couch1_level = 0;
+            couch2_level = 0;
+            couch3_level = 0;
+            curio_level = 0;
+        }  
+    }
+
+
     //automationLock.lock()
     try{
         isUpdateAutomatic = 1;
 
-        if (isOKToTurnOnBecause.apply(SofaTableLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsByMoodChange){
+        if (isOKToTurnOnBecause.apply(SofaTableLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
             SofaTableLamps_Dimmer.sendCommand(sofa_level);
             lastStateReason.put(SofaTableLamps_Dimmer.name, reason);
             lastStateDate.put(SofaTableLamps_Dimmer.name, now);
         }
 
-        if (isOKToTurnOnBecause.apply(FloorLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsByMoodChange){
+        if (isOKToTurnOnBecause.apply(FloorLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
             FloorLamps_Dimmer.sendCommand(floor_level);
             lastStateReason.put(FloorLamps_Dimmer.name, reason);
             lastStateDate.put(FloorLamps_Dimmer.name, now);
         }
 
-        if (isOKToTurnOnBecause.apply(MantleLight_Switch, reason, lastStateReason, lastStateDate) || changeIsByMoodChange){
+        if (isOKToTurnOnBecause.apply(RgbwBulb1_Color, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
+            RgbwBulb1_Color.sendCommand(floor_level);
+            lastStateReason.put(RgbwBulb1_Color.name, reason);
+            lastStateDate.put(RgbwBulb1_Color.name, now);
+        }
+
+        if (isOKToTurnOnBecause.apply(MantleLight_Switch, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
             MantleLight_Switch.sendCommand(mantle_level);
             lastStateReason.put(MantleLight_Switch.name, reason);
             lastStateDate.put(MantleLight_Switch.name, now);
         }
 
-        if (isOKToTurnOnBecause.apply(CouchLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsByMoodChange){
+        if (isOKToTurnOnBecause.apply(CouchLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
             CouchLamps_Dimmer.sendCommand(couch_level);
             lastStateReason.put(CouchLamps_Dimmer.name, reason);
             lastStateDate.put(CouchLamps_Dimmer.name, now);
         }
 
-        if (isOKToTurnOnBecause.apply(CurioCabinet_Dimmer, reason, lastStateReason, lastStateDate) || changeIsByMoodChange){
+        if (isOKToTurnOnBecause.apply(RgbwBulb2_Color, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
+            RgbwBulb2_Color.sendCommand(couch1_level);
+            lastStateReason.put(RgbwBulb2_Color.name, reason);
+            lastStateDate.put(RgbwBulb2_Color.name, now);
+        }
+
+        if (isOKToTurnOnBecause.apply(RgbwBulb3_Color, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
+            RgbwBulb3_Color.sendCommand(couch2_level);
+            lastStateReason.put(RgbwBulb3_Color.name, reason);
+            lastStateDate.put(RgbwBulb3_Color.name, now);
+        }
+
+        if (isOKToTurnOnBecause.apply(RgbwBulb4_Color, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
+            RgbwBulb4_Color.sendCommand(couch3_level);
+            lastStateReason.put(RgbwBulb4_Color.name, reason);
+            lastStateDate.put(RgbwBulb4_Color.name, now);
+        }
+
+        if (isOKToTurnOnBecause.apply(CurioCabinet_Dimmer, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
             CurioCabinet_Dimmer.sendCommand(curio_level);
             lastStateReason.put(CurioCabinet_Dimmer.name, reason);
             lastStateDate.put(CurioCabinet_Dimmer.name, now);
         }
 
-        if (isOKToTurnOnBecause.apply(XMasTree_Switch, reason, lastStateReason, lastStateDate) || changeIsByMoodChange){
-            XMasTree_Switch.sendCommand(xmas_tree);
-            lastStateReason.put(XMasTree_Switch.name, reason);
-            lastStateDate.put(XMasTree_Switch.name, now);
-        }
 
-
-
-        if (changeIsByMoodChange && vLivingroomMood.state == MOOD_MOVIE) {
+        if (vLivingroomScene.state == SCENE_MOVIE || vLivingroomScene.state == SCENE_TV) {
             //normally these items aren't controlled by the livingroom, but they're
             //in view and can be annoying while watching TV
             //since they don't participate in the scene, we'll set their status to manual
@@ -475,8 +614,137 @@ then
         isUpdateAutomatic = 0;
         //automationLock.lock();
     }
-  }
+  
 end
+
+
+rule "Livingroom Set Mood"
+when
+    System started or
+    Item vLivingroomMood changed
+then
+    logInfo("mood_applier", "mood changed " + vLivingroomMood.state);
+    //could do this in an array, but it will eventually be a random list
+    //of bulb ids; we're not doing them all just hte ones that are in the living room
+    //100 = candellight, 0 = 6000k/daylight
+    var bulb1_check  = RgbwBulb1_Color;
+    var bulb1_device = RgbwBulb1_ColorTemperature;
+    var bulb1_value  = 65;
+
+    var bulb2_check  = RgbwBulb2_Color;
+    var bulb2_device = RgbwBulb2_ColorTemperature;
+    var bulb2_value  = 65;
+
+    var bulb3_check  = RgbwBulb3_Color;
+    var bulb3_device = RgbwBulb3_ColorTemperature;
+    var bulb3_value  = 65;
+
+    var bulb4_check  = RgbwBulb4_Color;
+    var bulb4_device = RgbwBulb4_ColorTemperature;
+    var bulb4_value  = 65;
+
+    switch vLivingroomMood.state {
+        case MOOD_MORNING: {
+            bulb1_value = 50;
+            bulb2_value = 50;
+            bulb3_value = 50;
+            bulb4_value = 50;
+        }
+        case MOOD_AFTERNOON: {
+            bulb1_value = 20;
+            bulb2_value = 20;
+            bulb3_value = 20;
+            bulb4_value = 20;
+        }
+        case MOOD_EARLY_EVENING: {
+            bulb1_value = 60;
+            bulb2_value = 60;
+            bulb3_value = 60;
+            bulb4_value = 60;
+        }
+        case MOOD_MID_EVENING: {
+            bulb1_value = 70;
+            bulb2_value = 70;
+            bulb3_value = 70;
+            bulb4_value = 70;
+        }
+        case MOOD_LATE_EVENING: {
+            bulb1_value = 85;
+            bulb2_value = 85;
+            bulb3_value = 85;
+            bulb4_value = 85;
+        }
+        case MOOD_BEDTIME: {
+            bulb1_value = 90;
+            bulb2_value = 90;
+            bulb3_value = 90;
+            bulb4_value = 90;
+        }
+        case MOOD_COZY: {
+            bulb1_value = 100;
+            bulb2_value = 100;
+            bulb3_value = 100;
+            bulb4_value = 100;
+        }
+        case MOOD_CHIPPER: {
+            bulb1_value = 0;
+            bulb2_value = 0;
+            bulb3_value = 0;
+            bulb4_value = 0;
+        }
+        case MOOD_FESTIVE_XMAS: {
+            bulb1_device = RgbwBulb1_Color
+            bulb1_value = new HSBType(new DecimalType(0), new PercentType(90), (RgbwBulb1_Color.state as HSBType).brightness);
+
+            bulb2_device = RgbwBulb2_Color
+            bulb2_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
+
+            bulb3_device = RgbwBulb3_Color
+            bulb3_value = new HSBType(new DecimalType(0), new PercentType(90), (RgbwBulb1_Color.state as HSBType).brightness);
+
+            bulb4_device = RgbwBulb4_Color
+            bulb4_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
+        }
+        case MOOD_FESTIVE_STP: {
+            bulb1_device = RgbwBulb1_Color
+            bulb1_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
+
+            bulb2_device = RgbwBulb2_Color
+            bulb2_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
+
+            bulb3_device = RgbwBulb3_Color
+            bulb3_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
+
+            bulb4_device = RgbwBulb4_Color
+            bulb4_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
+        }
+        case MOOD_FESTIVE_JULY4: {
+            bulb1_device = RgbwBulb1_Color
+            bulb1_value = new HSBType(new DecimalType(0), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
+
+            bulb2_device = RgbwBulb2_Color
+            bulb2_value = new HSBType(new DecimalType(0), new PercentType(0), (RgbwBulb1_Color.state as HSBType).brightness);
+
+            bulb3_device = RgbwBulb3_Color
+            bulb3_value = new HSBType(new DecimalType(240), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
+
+            bulb4_device = RgbwBulb4_Color
+            bulb4_value = new HSBType(new DecimalType(240), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
+        }
+    }
+
+    bulb1_device.sendCommand(bulb1_value);
+    bulb2_device.sendCommand(bulb2_value);
+    bulb3_device.sendCommand(bulb3_value);
+    bulb4_device.sendCommand(bulb4_value);
+
+end
+
+
+
+
+
+
 
 
 rule "Kitchen Evening Lights On"
@@ -529,6 +797,10 @@ then
     try {
         isUpdateAutomatic = 1;
 
+        vLivingroomScene.postUpdate(SCENE_DARK);
+        lastStateReason.put(vLivingroomScene.name, REASON_GOODNIGHT);
+        lastStateDate.put(vLivingroomScene.name, now); 
+
         gGoodnightLights.members.forEach[ i | 
             if (isOKToTurnOffBecause.apply(i, REASON_GOODNIGHT, lastStateReason, lastStateDate)) {
                 if (i instanceof DimmerItem /*&& OFF !== i.state && 0 !== i.state*/) {
@@ -537,7 +809,7 @@ then
                     i.sendCommand(15)
                 }
 
-		Thread.sleep(100); //hopefully enough time to let the change actuall propagate out
+		Thread.sleep(500); //hopefully enough time to let the change actuall propagate out
 
                 i.sendCommand(OFF);
                 lastStateReason.put(i.name, REASON_GOODNIGHT);
@@ -567,8 +839,8 @@ end
 
 rule "Non-Bedroom blinds open in the morning"
 when
-    Time cron "0  0 8 ? * MON-FRI" or
-    Time cron "0 30 8 ? * SAT,SUN" or
+    Time cron "0 30 8 ? * MON-FRI" or
+    Time cron "0  0 9 ? * SAT,SUN" or
     Item vIsLightOut changed from OFF to ON
 then
     var ourreason = REASON_TIME;
@@ -604,8 +876,8 @@ end
 
 rule "Bedroom blinds open in the morning"
 when
-    Time cron "0 0 8 ? * MON-FRI" or
-    Time cron "0 30 8 ? * SAT,SUN"
+    Time cron "0 45 8 ? * MON-FRI" or
+    Time cron "0 15 9 ? * SAT,SUN"
 then
     logInfo("bedroom blinds", "rule triggered")
 
@@ -742,6 +1014,7 @@ then
                     i.sendCommand(ON)
                     lastStateReason.put(i.name, REASON_MOTION)
                     lastStateDate.put(i.name, now)
+                    if(autoOffTimers.get(i.name)) {autoOffTimers.get(i.name).cancel();}
                     autoOffTimers.put(i.name, null)
                 }
             ]
