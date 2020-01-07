@@ -421,14 +421,14 @@ then
         if (null === luminace) {luminance = 50;}
     }
 
-    if ((hour >= 17 && hour <= 18) || (luminance < 40 && hour > 13 && hour < 21)) {
+    if ((hour >= 17 && hour <= 18) || (luminance < 40 && hour > 13 && hour < 20)) {
         if (isOKToTurnOnBecause.apply(vLivingroomScene, REASON_TIME, lastStateReason, lastStateDate)){
             vLivingroomScene.postUpdate(SCENE_NORMAL);
             lastStateReason.put(vLivingroomScene.name, REASON_TIME);
             lastStateDate.put(vLivingroomScene.name, now);
         }
     }
-    else if (hour >= 21) {
+    else if (hour >= 20) {
         if (isOKToTurnOnBecause.apply(vLivingroomScene, REASON_TIME, lastStateReason, lastStateDate)){
             vLivingroomScene.postUpdate(SCENE_COZY);
             lastStateReason.put(vLivingroomScene.name, REASON_TIME);
