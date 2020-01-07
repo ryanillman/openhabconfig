@@ -10,13 +10,13 @@ then
 
   if (sunpos > 122 && sunpos < 130 && cloudiness < 50 && sunelv > 40) {
     logInfo("upstairs-blinds-sun-close.rule", "closing upstairs blinds to prevent the sun from coming in")
-    RyansOfficeBlinds_Rollershutter.sendCommand(DOWN)
-    StairwellBlinds_Rollershutter.sendCommand(DOWN)
+    //RyansOfficeBlinds_Rollershutter.sendCommand(DOWN)
+    //StairwellBlinds_Rollershutter.sendCommand(DOWN)
   }
 
   if (sunpos > 214 && sunpos < 220) {
-    RyansOfficeBlinds_Rollershutter.sendCommand(UP)
-    StairwellBlinds_Rollershutter.sendCommand(UP)
+    //RyansOfficeBlinds_Rollershutter.sendCommand(UP)
+    //StairwellBlinds_Rollershutter.sendCommand(UP)
   }
 end
 

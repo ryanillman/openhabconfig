@@ -1,6 +1,6 @@
 var Timer  blindUpTimer
 var Timer  ryanAlarmTimer
-var Number ryanAlarmTarget = 40
+var Number ryanAlarmTarget = 20
 var Number ryanAlarmStep   = 1
 
 var Number blindsUnderManualControl = 0
