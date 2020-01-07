@@ -473,14 +473,14 @@ then
             curio_level = 100;
         }
         case SCENE_MORNING: {
-            sofa_level  = 18;
-            floor_level = 15;
+            sofa_level  = 30;
+            floor_level = 30;
             mantle_level = OFF;
-            couch_level = 20;
-            couch1_level = 20;
-            couch2_level = 20;
-            couch3_level = 20;
-            curio_level = 30;
+            couch_level = 35;
+            couch1_level = 35;
+            couch2_level = 35;
+            couch3_level = 35;
+            curio_level = 35;
         } 
         case SCENE_TV: {
             sofa_level  = 18;
@@ -1016,8 +1016,10 @@ then
     catch (Throwable t) {
         logError("nightlight", "failed to compute luminance via map/reduce, was something null? \n" + t.getMessage)
     }
+   
 
     if (triggeringItem.state === ON && luminanceResult < 10) {
+        logInfo("nightlight", triggeringItem.name + " motion triggered with luminance in range");
         //automationLock.lock()
         try {
             isUpdateAutomatic = 1;
@@ -1043,14 +1045,15 @@ then
             //automationLock.unlock()
         }
     }
-    else {
+    else if (triggeringItem.state === OFF) {
+        logInfo("nightlight", triggeringItem.name + " motion stopped");
         lightsGroup.members.forEach[ i |
             //if this light isn't on by motion now, there's no point in scheduling the timer
             if (lastStateReason.get(i.name) !== REASON_MOTION) {
                 return;
             }
 
-            autoOffTimers.put(i.name, createTimer(now.plusMinutes(1), [ |
+            autoOffTimers.put(i.name, createTimer(now.plusMinutes(2), [ |
                 //automationLock.lock();
                 isUpdateAutomatic = 1;
                 try{
