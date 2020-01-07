@@ -1,5 +1,5 @@
 import java.util.HashMap
-//import java.util.concurrent.locks.ReentrantLock
+import java.util.concurrent.locks.ReentrantLock
 import org.eclipse.smarthome.model.script.ScriptServiceUtil
 
 
@@ -38,7 +38,7 @@ val HashMap<String, String>   lastStateReason = newHashMap()
 val HashMap<String, DateTime> lastStateDate   = newHashMap()
 val HashMap<String, Timer>    autoOffTimers   = newHashMap()
 
-//val ReentrantLock automationLock = new ReentrantLock()
+val ReentrantLock automationLock = null //new ReentrantLock()
 
 
 val org.eclipse.xtext.xbase.lib.Functions$Function4 <GenericItem, String, HashMap<String, String>, HashMap<String, DateTime>, Boolean> isOKToTurnOnBecause = [ 
@@ -337,7 +337,7 @@ when
     Time cron "0 */10 * ? * *"
 then
     var String currentMood = vLivingroomMood.state;
-    var Number hour = 21//now.getHourOfDay();
+    var Number hour = now.getHourOfDay();
     var boolean isWorkNight = now.getDayOfWeek != 5 && now.getDayOfWeek != 6;
     var String newMood = null;
 
@@ -455,11 +455,11 @@ then
 
   if (null !== lastStateReason.get(vLivingroomScene.name)) {
       reason = lastStateReason.get(vLivingroomScene.name);
-      logInfo("livingroom_scene", "found vLivingroomScene reason " + reason + ", stealing it");
+      logInfo("scenes", "found vLivingroomScene reason " + reason + ", stealing it");
   }
   else {
       reason = REASON_TIME;
-      logError("livingroom_scene", "failed to find vLivingroomScene reason, going with time 'cause why not");
+      logError("scenes", "failed to find vLivingroomScene reason, going with time 'cause why not");
   }
 
   var changeIsBySceneChange = true;
@@ -484,12 +484,12 @@ then
         } 
         case SCENE_TV: {
             sofa_level  = 18;
-            floor_level = 15;
+            floor_level = 0;
             mantle_level = OFF;
             couch_level = 15;
             couch1_level = 5;
             couch2_level = 5;
-            couch3_level = OFF;
+            couch3_level = 5;
             curio_level = 15;
         }
         case SCENE_MOVIE: {
@@ -524,8 +524,10 @@ then
         }  
     }
 
-
+    logInfo("scenes", "setting scene " + vLivingroomScene.state);
+    logDebug("scenes", "getting lock...");
     //automationLock.lock()
+    logDebug("scenes", "got it");
     try{
         isUpdateAutomatic = 1;
 
@@ -534,6 +536,7 @@ then
             lastStateReason.put(SofaTableLamps_Dimmer.name, reason);
             lastStateDate.put(SofaTableLamps_Dimmer.name, now);
         }
+
 
         if (isOKToTurnOnBecause.apply(FloorLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
             FloorLamps_Dimmer.sendCommand(floor_level);
@@ -560,6 +563,7 @@ then
         }
 
         if (isOKToTurnOnBecause.apply(RgbwBulb2_Color, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
+            
             RgbwBulb2_Color.sendCommand(couch1_level);
             lastStateReason.put(RgbwBulb2_Color.name, reason);
             lastStateDate.put(RgbwBulb2_Color.name, now);
@@ -585,14 +589,15 @@ then
 
 
         if (vLivingroomScene.state == SCENE_MOVIE || vLivingroomScene.state == SCENE_TV) {
+            logDebug("scenes", "new scene is MOVIE or TV");
             //normally these items aren't controlled by the livingroom, but they're
             //in view and can be annoying while watching TV
             //since they don't participate in the scene, we'll set their status to manual
             //so they don't come back up on their own for a while.
-            logInfo("movie_scene.rules", "Movie time is triggering, checking diningroom light state: "  + (DiningroomLights_Dimmer.state as Number).toString);
+            logInfo("scenes", "Movie time is triggering, checking diningroom light state: "  + (DiningroomLights_Dimmer.state as Number).toString);
 
             if (DiningroomLights_Dimmer.state as Number > 20) {
-                logInfo("Diningroom Lights were over 20")
+                logInfo("scenes", "Diningroom Lights were over 20")
                 DiningroomLights_Dimmer.sendCommand(15);
                 lastStateReason.put(DiningroomLights_Dimmer.name, REASON_MANUAL);
                 lastStateDate.put(DiningroomLights_Dimmer.name, now);
@@ -608,11 +613,11 @@ then
         Thread.sleep(200); //let everything catch up before turning off automatic updates
     }
     catch (Throwable t) {
-        logError("eveninglights", t.getMessage())
+        logError("scenes", "failed to complete setting up scene: " + t.getMessage())
     }
     finally {
         isUpdateAutomatic = 0;
-        //automationLock.lock();
+        //automationLock.unlock();
     }
   
 end
@@ -733,10 +738,19 @@ then
         }
     }
 
-    bulb1_device.sendCommand(bulb1_value);
-    bulb2_device.sendCommand(bulb2_value);
-    bulb3_device.sendCommand(bulb3_value);
-    bulb4_device.sendCommand(bulb4_value);
+    try {
+        //automationLock.lock();
+        bulb1_device.sendCommand(bulb1_value);
+        bulb2_device.sendCommand(bulb2_value);
+        bulb3_device.sendCommand(bulb3_value);
+        bulb4_device.sendCommand(bulb4_value);
+    }
+    catch (Throwable t) {
+        logError("mood_applier", "failed to complete setting up scene: " + t.getMessage())
+    }
+    finally {
+        //automationLock.unlock();
+    }
 
 end
 
