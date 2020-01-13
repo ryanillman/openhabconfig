@@ -925,6 +925,12 @@ then
                 lastStateDate.put(CoffeeLight_Switch.name, now);
             }
 
+            if (isOKToTurnOnBecause.apply(DiningroomLights_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
+                DiningroomLights_Dimmer.sendCommand(50);
+                lastStateReason.put(DiningroomLights_Dimmer.name, REASON_TIME);
+                lastStateDate.put(DiningroomLights_Dimmer.name, now);
+            }
+
 
             Thread.sleep(200); //let everything catch up before turning off automatic updates
         }
