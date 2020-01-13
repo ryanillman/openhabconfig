@@ -33,6 +33,7 @@ val String MOOD_CHIPPER        = "chipper"
 val String MOOD_FESTIVE_XMAS   = "xmas"
 val String MOOD_FESTIVE_STP    = "stpatricks"
 val String MOOD_FESTIVE_JULY4  = "july4"
+val String MOOD_FESTIVE_EASTER = "easter"
 
 val HashMap<String, String>   lastStateReason = newHashMap()
 val HashMap<String, DateTime> lastStateDate   = newHashMap()
@@ -45,7 +46,61 @@ val org.eclipse.xtext.xbase.lib.Functions$Function4 <GenericItem, String, HashMa
     GenericItem item, String reason, HashMap<String, String> itemReason, HashMap<String, DateTime> itemTime | 
 
     var String oldReason = itemReason.get(item.name);
-    if (oldReason === null) { oldReason = "other"; }
+    if (oldReason === null) { oldReason = ""; }
+
+    var currentState = item.state;
+    
+    //90 minutes seems like a good wait time for manual overrides. we'll see how it goes
+    //this will probably come from group membership or something
+    var DateTime oldTime = itemTime.get(item.name);
+    if (oldTime === null) { oldTime = now; }
+    val boolean manualTimeExpired    = now.minusMinutes(90).isAfter(oldTime);
+    var boolean goodnightTimeExpired = now.getDayOfMonth() != oldTime.getDayOfMonth(); 
+
+    var boolean retval = true;
+
+
+    if (reason != "health_safety" && oldReason == "health_safety") {
+        logDebug("isOkToTurnOnBecause", item.name + "update denied because it's not health_safety");
+        retval = false;
+    }
+    else if (oldReason == "manual" && ! manualTimeExpired) {
+        logDebug("isOkToTurnOnBecause", item.name + "update denied because current state was set manually");
+        retval = false;
+    }
+    //don't "downgrade" a reason for something to already be on
+    else if ( (currentState != OFF && currentState != 0) && (
+        (reason == "weather" && (oldReason == "time")) ||
+        (reason == "other"   && (oldReason == "time" || oldReason == "weather")) ||
+        (reason == "timer"   && (oldReason == "time" || oldReason == "weather" || oldReason == "other")) ||
+        (reason == "motion"  && (oldReason == "time" || oldReason == "weather" || oldReason == "other" || oldReason == "timer"))
+        ))
+    {
+        logDebug("isOkToTurnOnBecause", item.name + "update denied because it's a downgrade of current reason: " + oldReason + " to " + reason);
+        retval = false;
+    }
+    else if ("timer" == reason && oldReason =="goodnight") {
+        logDebug("isOkToTurnOnBecause", item.name + "update denied because timers can't overrule goodnight");
+        retval = false;
+    }
+    //time can only overrule goodnight if we've crossed midnight
+    else if ("time" == reason && "goodnight" == oldReason && ! goodnightTimeExpired) {
+        logDebug("isOkToTurnOnBecause",  item.name + "update denied because time can't overrule goodnight on the same day");
+        retval = false;
+    }
+
+    if (retval == true) {
+        logDebug("isOkToTurnOnBecause", item.name + "allowing update");
+    }
+
+    retval
+]
+
+val org.eclipse.xtext.xbase.lib.Functions$Function4<GenericItem, String, HashMap<String, String>, HashMap<String, DateTime>, Boolean> isOKToTurnOffBecause = [ 
+    GenericItem item, String reason, HashMap<String, String> itemReason, HashMap<String, DateTime> itemTime | 
+
+    var String oldReason = itemReason.get(item.name);
+    if (oldReason === null) { oldReason = ""; }
 
     var currentState = item.state;
     
@@ -57,64 +112,28 @@ val org.eclipse.xtext.xbase.lib.Functions$Function4 <GenericItem, String, HashMa
 
     var boolean retval = true;
 
-    
     if (reason != "health_safety" && oldReason == "health_safety") {
-        retval = false;
-    }
-    else if (oldReason == "manual" && ! manualTimeExpired) {
-        retval = false;
-    }
-    //don't "downgrade" a reason for something to already be on
-    else if ( (currentState != OFF ) &&
-        (reason == "weather" && currentState == ON && (oldReason == "time")) ||
-        (reason == "other"   && currentState == ON && (oldReason == "time" || oldReason == "weather")) ||
-        (reason == "timer"   && currentState == ON && (oldReason == "time" || oldReason == "weather" || oldReason == "other")) ||
-        (reason == "motion"  && currentState == ON && (oldReason == "time" || oldReason == "weather" || oldReason == "other" || oldReason == "timer"))
-        )
-    {
-        retval = false;
-    }
-    //weather and timers can't overrrule goodnight (but time, motion and other can)
-    else if (("weather" == reason || "timer" == reason) && oldReason =="goodnight") {
-        retval = false;
-    }
-
-    retval
-]
-
-val org.eclipse.xtext.xbase.lib.Functions$Function4<GenericItem, String, HashMap<String, String>, HashMap<String, DateTime>, Boolean> isOKToTurnOffBecause = [ 
-    GenericItem item, String reason, HashMap<String, String> itemReason, HashMap<String, DateTime> itemTime | 
-
-    var String oldReason = itemReason.get(item.name);
-    if (oldReason === null) { oldReason = "other"; }
-
-    var State currentState = item.state;
-    
-    //90 minutes seems like a good wait time for manual overrides. we'll see how it goes
-    //this will probably come from group membership or something
-    var DateTime oldTime = itemTime.get(item.name);
-    if (oldTime === null) { oldTime = now; }
-    val boolean manualTimeExpired  = now.minusMinutes(90).isAfter(oldTime);
-
-    var boolean retval = true;
-
-    if (reason != "health_safety" && oldReason == "health_safety") {
+        logDebug("isOkToTurnOffBecause", item.name + "update denied because it's not health_safety");
         retval = false;
     }
     else if (reason=="goodnight"){
+        logDebug("isOkToTurnOffBecause", item.name + "update APPROVED because goodnight");
         retval = true; //goodnight is a wierd quaisi manual reason that can override basically anything
     }
     //timers can overide manual (otherwise auto-off timers wouldn't work)
     else if (oldReason == "manual" && ! manualTimeExpired && "timer" != reason) {
+        logDebug("isOkToTurnOffBecause", item.name + "update denied because state was set manually and manual time has not expired");
         retval = false;
     }
-    else if (
+    //don't downgrade a reason for something to be off
+    else if (!(currentState != OFF && currentState != 0) && (
         (reason == "weather" && (oldReason == "time")) ||
         (reason == "other" &&   (oldReason == "time" || oldReason == "weather")) ||
         (reason == "timer" &&   (oldReason == "time" || oldReason == "weather" || oldReason == "other")) ||
         (reason == "motion" &&  (oldReason == "time" || oldReason == "weather" || oldReason == "other" || oldReason == "timer"))
-        )
+    ))
     {
+        logDebug("isOkToTurnOffBecause", item.name + "update denied because it's a downgrade of current reason: " + oldReason + " to " + reason);
         retval = false;
     }
 
@@ -146,9 +165,19 @@ then
     var DateTime oldTime = lastStateDate.get(triggeringItem.name);
     var String oldReason = lastStateReason.get(triggeringItem.name);
     if (oldTime === null) { oldTime = now.minusMinutes(99); }
+    if (oldReason === null) { oldReason = ""; }
     val boolean isRecentChange  = now.minusSeconds(2).isBefore(oldTime);
 
     val boolean appearsToBeManual = isUpdateAutomatic != 1 && ! isRecentChange;
+
+    
+
+    logDebug("gTrackStateReason", "item " + triggeringItem.name + " received command, checking to see if it was manual");
+    logDebug("gTrackStateReason", "isUpdateAutomatic flag: " + isUpdateAutomatic.toString());
+    logDebug("gTrackStateReason", "old reason: " + oldReason.toString());
+    logDebug("gTrackStateReason", "old time: " + oldTime.toString());
+    logDebug("gTrackStateReason", "is recent change: " + isRecentChange.toString());
+    logDebug("gTrackStateReason", "appears to be manual: " + appearsToBeManual.toString());
 
     if (appearsToBeManual && REASON_HEALTH_SAFETY == oldReason){
         //request denied
@@ -162,6 +191,7 @@ then
         isUpdateAutomatic = 0;
     }
     else if (appearsToBeManual) {
+        logDebug("gTrackStateReason", "setting item " + triggeringItem.name + " to REASON_MANUAL");
         lastStateReason.put(triggeringItem.name, REASON_MANUAL);
         lastStateDate.put(triggeringItem.name, now);
     }
@@ -269,7 +299,7 @@ then
         vLivingroomScene.postUpdate(SCENE_MORNING);
 
 
-        if (now.getDayOfWeek < 6) {         
+        if (now.getDayOfWeek < 6 && RyanPresent.state == ON) {         
             RyansDeskLamp_Dimmer.sendCommand(40);
             lastStateReason.put(RyansDeskLamp_Dimmer.name, REASON_TIME);
             lastStateDate.put(RyansDeskLamp_Dimmer.name, now);
@@ -291,7 +321,6 @@ then
         logError("morning_lights", t.getMessage())
     }
     finally {
-        Scene_MorningLights.postUpdate(OFF);
         isUpdateAutomatic = 0;
         //automationLock.unlock()
     }
@@ -376,7 +405,7 @@ then
             isUpdateAutomatic = 1;
 
             if (isOKToTurnOnBecause.apply(vLivingroomMood, REASON_TIME, lastStateReason, lastStateDate)){
-                logInfo("mood_manager", "new mood applied " + newMood);
+                logDebug("mood_manager", "new mood applied " + newMood);
                 vLivingroomMood.postUpdate(newMood);
                 lastStateReason.put(BarLights_Dimmer.name, REASON_TIME);
                 lastStateDate.put(BarLights_Dimmer.name, now);
@@ -401,10 +430,7 @@ when
     Time cron "0 0 17 ? * * " or
     Time cron "0 0 21 ? * * " or
     Item LivingRoomMultisensor_SensorLuminance changed
-then
-    //the lights should come up to 'evening' level if the luminace gets below 30, or 
-    //at 5pm, whichever comes first. but don't turn on after 9pm  for luminance
-    
+then    
     var Number hour = null;
     var Number luminance = null;
 
@@ -421,14 +447,14 @@ then
         if (null === luminace) {luminance = 50;}
     }
 
-    if ((hour >= 17 && hour <= 18) || (luminance < 40 && hour > 13 && hour < 20)) {
+    if ((hour >= 17 && hour <= 18) || (luminance < 40 && hour > 11 && hour < 21)) {
         if (isOKToTurnOnBecause.apply(vLivingroomScene, REASON_TIME, lastStateReason, lastStateDate)){
             vLivingroomScene.postUpdate(SCENE_NORMAL);
             lastStateReason.put(vLivingroomScene.name, REASON_TIME);
             lastStateDate.put(vLivingroomScene.name, now);
         }
     }
-    else if (hour >= 20) {
+    else if (hour >= 21 && vLivingroomScene.state !== SCENE_DARK) {
         if (isOKToTurnOnBecause.apply(vLivingroomScene, REASON_TIME, lastStateReason, lastStateDate)){
             vLivingroomScene.postUpdate(SCENE_COZY);
             lastStateReason.put(vLivingroomScene.name, REASON_TIME);
@@ -440,12 +466,13 @@ end
 rule "Livingroom set Scene"
 when
   System started or
-  Item vLivingroomScene changed
+  Item vLivingroomScene changed or
+  Time cron "0 */15 * ? * * "
 then
   var sofa_level  = 100;
-  var floor_level = 100;  
+  var floor1_level = 100;  
+  var floor2_level = 100;  
   var mantle_level = ON;
-  var couch_level = 100;
   var couch1_level = 100;
   var couch2_level = 100;
   var couch3_level = 100;
@@ -455,7 +482,7 @@ then
 
   if (null !== lastStateReason.get(vLivingroomScene.name)) {
       reason = lastStateReason.get(vLivingroomScene.name);
-      logInfo("scenes", "found vLivingroomScene reason " + reason + ", stealing it");
+      logDebug("scenes", "found vLivingroomScene reason " + reason + ", stealing it");
   }
   else {
       reason = REASON_TIME;
@@ -468,15 +495,16 @@ then
     switch vLivingroomScene.state {
         case SCENE_NORMAL: {
             sofa_level  = 100;
-            floor_level = 100;
+            floor1_level = 100;
+            floor2_level = 100;
             mantle_level = ON;
             curio_level = 100;
         }
         case SCENE_MORNING: {
             sofa_level  = 30;
-            floor_level = 30;
+            floor1_level = 30;
+            floor2_level = 30
             mantle_level = OFF;
-            couch_level = 35;
             couch1_level = 35;
             couch2_level = 35;
             couch3_level = 35;
@@ -484,19 +512,18 @@ then
         } 
         case SCENE_TV: {
             sofa_level  = 18;
-            floor_level = 0;
+            floor1_level = 5;
+            floor2_level = 0;
             mantle_level = OFF;
-            couch_level = 15;
             couch1_level = 5;
             couch2_level = 5;
             couch3_level = 5;
             curio_level = 15;
         }
         case SCENE_MOVIE: {
-            sofa_level  = 12;
-            floor_level = 0;
+            floor1_level = 5;
+            floor2_level = 5;
             mantle_level = OFF;
-            couch_level = 0;
             couch1_level = 0;
             couch2_level = 0;
             couch3_level = 0;
@@ -504,19 +531,19 @@ then
         }
         case SCENE_COZY: {
             sofa_level  = 20;
-            floor_level = 20;
+            floor1_level = 35;
+            floor2_level = 35;
             mantle_level = OFF;
-            couch_level = 15;
-            couch1_level = 15;
-            couch2_level = 15;
-            couch3_level = 15;
+            couch1_level = 35;
+            couch2_level = 35;
+            couch3_level = 35;
             curio_level = 5;
         }
         case SCENE_DARK: {
             sofa_level  = 0;
-            floor_level = 0;
-            mantle_level= OFF;
-            couch_level = 0;
+            floor1_level = 0;
+            floor2_level = 0;
+            mantle_level = OFF;
             couch1_level = 0;
             couch2_level = 0;
             couch3_level = 0;
@@ -525,27 +552,31 @@ then
     }
 
     logInfo("scenes", "setting scene " + vLivingroomScene.state);
-    logDebug("scenes", "getting lock...");
     //automationLock.lock()
-    logDebug("scenes", "got it");
     try{
         isUpdateAutomatic = 1;
 
-        if (isOKToTurnOnBecause.apply(SofaTableLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
-            SofaTableLamps_Dimmer.sendCommand(sofa_level);
-            lastStateReason.put(SofaTableLamps_Dimmer.name, reason);
-            lastStateDate.put(SofaTableLamps_Dimmer.name, now);
+        if (isOKToTurnOnBecause.apply(RgbwBulb6_Color, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
+            RgbwBulb6_Color.sendCommand(sofa_level);
+            lastStateReason.put(RgbwBulb6_Color.name, reason);
+            lastStateDate.put(RgbwBulb6_Color.name, now);
+        }
+
+        if (isOKToTurnOnBecause.apply(RgbwBulb7_Color, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
+            RgbwBulb7_Color.sendCommand(sofa_level);
+            lastStateReason.put(RgbwBulb7_Color.name, reason);
+            lastStateDate.put(RgbwBulb7_Color.name, now);
         }
 
 
-        if (isOKToTurnOnBecause.apply(FloorLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
-            FloorLamps_Dimmer.sendCommand(floor_level);
-            lastStateReason.put(FloorLamps_Dimmer.name, reason);
-            lastStateDate.put(FloorLamps_Dimmer.name, now);
+        if (isOKToTurnOnBecause.apply(RgbwBulb5_Color, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
+            RgbwBulb5_Color.sendCommand(floor1_level);
+            lastStateReason.put(RgbwBulb5_Color.name, reason);
+            lastStateDate.put(RgbwBulb5_Color.name, now);
         }
 
         if (isOKToTurnOnBecause.apply(RgbwBulb1_Color, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
-            RgbwBulb1_Color.sendCommand(floor_level);
+            RgbwBulb1_Color.sendCommand(floor2_level);
             lastStateReason.put(RgbwBulb1_Color.name, reason);
             lastStateDate.put(RgbwBulb1_Color.name, now);
         }
@@ -554,12 +585,6 @@ then
             MantleLight_Switch.sendCommand(mantle_level);
             lastStateReason.put(MantleLight_Switch.name, reason);
             lastStateDate.put(MantleLight_Switch.name, now);
-        }
-
-        if (isOKToTurnOnBecause.apply(CouchLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
-            CouchLamps_Dimmer.sendCommand(couch_level);
-            lastStateReason.put(CouchLamps_Dimmer.name, reason);
-            lastStateDate.put(CouchLamps_Dimmer.name, now);
         }
 
         if (isOKToTurnOnBecause.apply(RgbwBulb2_Color, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
@@ -594,10 +619,10 @@ then
             //in view and can be annoying while watching TV
             //since they don't participate in the scene, we'll set their status to manual
             //so they don't come back up on their own for a while.
-            logInfo("scenes", "Movie time is triggering, checking diningroom light state: "  + (DiningroomLights_Dimmer.state as Number).toString);
+            logDebug("scenes", "Movie time is triggering, checking diningroom light state: "  + (DiningroomLights_Dimmer.state as Number).toString);
 
             if (DiningroomLights_Dimmer.state as Number > 20) {
-                logInfo("scenes", "Diningroom Lights were over 20")
+                logDebug("scenes", "Diningroom Lights were over 20")
                 DiningroomLights_Dimmer.sendCommand(15);
                 lastStateReason.put(DiningroomLights_Dimmer.name, REASON_MANUAL);
                 lastStateDate.put(DiningroomLights_Dimmer.name, now);
@@ -626,8 +651,14 @@ end
 rule "Livingroom Set Mood"
 when
     System started or
-    Item vLivingroomMood changed
+    Item vLivingroomMood changed or
+    Time cron "0 */15 * ? * * "
 then
+    if (null === vLivingroomMood.state) {
+        logError("mood_applier", "vLivingroomMood.state was null");
+        return;
+    }
+
     logInfo("mood_applier", "mood changed " + vLivingroomMood.state);
     //could do this in an array, but it will eventually be a random list
     //of bulb ids; we're not doing them all just hte ones that are in the living room
@@ -648,94 +679,185 @@ then
     var bulb4_device = RgbwBulb4_ColorTemperature;
     var bulb4_value  = 65;
 
-    switch vLivingroomMood.state {
-        case MOOD_MORNING: {
-            bulb1_value = 50;
-            bulb2_value = 50;
-            bulb3_value = 50;
-            bulb4_value = 50;
-        }
-        case MOOD_AFTERNOON: {
-            bulb1_value = 20;
-            bulb2_value = 20;
-            bulb3_value = 20;
-            bulb4_value = 20;
-        }
-        case MOOD_EARLY_EVENING: {
-            bulb1_value = 60;
-            bulb2_value = 60;
-            bulb3_value = 60;
-            bulb4_value = 60;
-        }
-        case MOOD_MID_EVENING: {
-            bulb1_value = 70;
-            bulb2_value = 70;
-            bulb3_value = 70;
-            bulb4_value = 70;
-        }
-        case MOOD_LATE_EVENING: {
-            bulb1_value = 85;
-            bulb2_value = 85;
-            bulb3_value = 85;
-            bulb4_value = 85;
-        }
-        case MOOD_BEDTIME: {
-            bulb1_value = 90;
-            bulb2_value = 90;
-            bulb3_value = 90;
-            bulb4_value = 90;
-        }
-        case MOOD_COZY: {
-            bulb1_value = 100;
-            bulb2_value = 100;
-            bulb3_value = 100;
-            bulb4_value = 100;
-        }
-        case MOOD_CHIPPER: {
-            bulb1_value = 0;
-            bulb2_value = 0;
-            bulb3_value = 0;
-            bulb4_value = 0;
-        }
-        case MOOD_FESTIVE_XMAS: {
-            bulb1_device = RgbwBulb1_Color
-            bulb1_value = new HSBType(new DecimalType(0), new PercentType(90), (RgbwBulb1_Color.state as HSBType).brightness);
+    var bulb5_check  = RgbwBulb5_Color;
+    var bulb5_device = RgbwBulb5_ColorTemperature;
+    var bulb5_value  = 65;
 
-            bulb2_device = RgbwBulb2_Color
-            bulb2_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
+    var bulb6_check  = RgbwBulb6_Color;
+    var bulb6_device = RgbwBulb6_ColorTemperature;
+    var bulb6_value  = 65;
 
-            bulb3_device = RgbwBulb3_Color
-            bulb3_value = new HSBType(new DecimalType(0), new PercentType(90), (RgbwBulb1_Color.state as HSBType).brightness);
+    var bulb7_check  = RgbwBulb7_Color;
+    var bulb7_device = RgbwBulb7_ColorTemperature;
+    var bulb7_value  = 65;
 
-            bulb4_device = RgbwBulb4_Color
-            bulb4_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
+    try {
+
+        switch vLivingroomMood.state {
+            case MOOD_MORNING: {
+                bulb1_value = 50;
+                bulb2_value = 50;
+                bulb3_value = 50;
+                bulb4_value = 50;
+                bulb5_value = 50;
+                bulb6_value = 50;
+                bulb7_value = 50;
+            }
+            case MOOD_AFTERNOON: {
+                bulb1_value = 20;
+                bulb2_value = 20;
+                bulb3_value = 20;
+                bulb4_value = 20;
+                bulb5_value = 20;
+                bulb6_value = 20;
+                bulb7_value = 20;
+            }
+            case MOOD_EARLY_EVENING: {
+                bulb1_value = 60;
+                bulb2_value = 60;
+                bulb3_value = 60;
+                bulb4_value = 60;
+                bulb5_value = 60;
+                bulb6_value = 60;
+                bulb7_value = 60;
+            }
+            case MOOD_MID_EVENING: {
+                bulb1_value = 70;
+                bulb2_value = 70;
+                bulb3_value = 70;
+                bulb4_value = 70;
+                bulb5_value = 70;
+                bulb6_value = 70;
+                bulb7_value = 70;
+            }
+            case MOOD_LATE_EVENING: {
+                bulb1_value = 85;
+                bulb2_value = 85;
+                bulb3_value = 85;
+                bulb4_value = 85;
+                bulb5_value = 85;
+                bulb6_value = 85;
+                bulb7_value = 85;
+            }
+            case MOOD_BEDTIME: {
+                bulb1_value = 90;
+                bulb2_value = 90;
+                bulb3_value = 90;
+                bulb4_value = 90;
+                bulb5_value = 90;
+                bulb6_value = 90;
+                bulb7_value = 90;
+            }
+            case MOOD_COZY: {
+                bulb1_value = 100;
+                bulb2_value = 100;
+                bulb3_value = 100;
+                bulb4_value = 100;
+                bulb5_value = 100;
+                bulb6_value = 100;
+                bulb7_value = 100;
+            }
+            case MOOD_CHIPPER: {
+                bulb1_value = 0;
+                bulb2_value = 0;
+                bulb3_value = 0;
+                bulb4_value = 0;
+                bulb5_value = 0;
+                bulb6_value = 0;
+                bulb7_value = 0;
+            }
+            case MOOD_FESTIVE_XMAS: {
+                bulb1_device = RgbwBulb1_Color
+                bulb1_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
+
+                bulb2_device = RgbwBulb2_Color
+                bulb2_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
+
+                bulb3_device = RgbwBulb3_Color
+                bulb3_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
+
+                bulb4_device = RgbwBulb4_Color
+                bulb4_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
+
+                bulb5_device = RgbwBulb5_Color
+                bulb5_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
+
+                bulb6_device = RgbwBulb6_Color
+                bulb6_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
+
+                bulb7_device = RgbwBulb7_Color
+                bulb7_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
+            }
+            case MOOD_FESTIVE_STP: {
+                bulb1_device = RgbwBulb1_Color
+                bulb1_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
+
+                bulb2_device = RgbwBulb2_Color
+                bulb2_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
+
+                bulb3_device = RgbwBulb3_Color
+                bulb3_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
+
+                bulb4_device = RgbwBulb4_Color
+                bulb4_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
+
+                bulb5_device = RgbwBulb5_Color
+                bulb5_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
+
+                bulb6_device = RgbwBulb6_Color
+                bulb6_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
+
+                bulb7_device = RgbwBulb7_Color
+                bulb7_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
+            }
+            case MOOD_FESTIVE_JULY4: {
+                bulb1_device = RgbwBulb1_Color
+                bulb1_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
+
+                bulb2_device = RgbwBulb2_Color
+                bulb2_value = new HSBType(new DecimalType(0), new PercentType(0), if (null === RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
+
+                bulb3_device = RgbwBulb3_Color
+                bulb3_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
+
+                bulb4_device = RgbwBulb4_Color
+                bulb4_value = new HSBType(new DecimalType(240), new PercentType(100), if (null === RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
+
+                bulb5_device = RgbwBulb5_Color
+                bulb5_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
+
+                bulb6_device = RgbwBulb6_Color
+                bulb6_value = new HSBType(new DecimalType(240), new PercentType(0), if (null === RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
+
+                bulb7_device = RgbwBulb7_Color
+                bulb7_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
+            }
+            case MOOD_FESTIVE_EASTER: {
+                bulb1_device = RgbwBulb1_Color
+                bulb1_value = new HSBType(new DecimalType(0), new PercentType(90), if (null === RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
+
+                bulb2_device = RgbwBulb2_Color
+                bulb2_value = new HSBType(new DecimalType(51.42), new PercentType(90), if (null === RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
+
+                bulb3_device = RgbwBulb3_Color
+                bulb3_value = new HSBType(new DecimalType(102.84), new PercentType(90), if (null === RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
+
+                bulb4_device = RgbwBulb4_Color
+                bulb4_value = new HSBType(new DecimalType(154.26), new PercentType(90), if (null === RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
+
+                bulb5_device = RgbwBulb5_Color
+                bulb5_value = new HSBType(new DecimalType(205.68), new PercentType(90), if (null === RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
+
+                bulb6_device = RgbwBulb6_Color
+                bulb6_value = new HSBType(new DecimalType(257.1), new PercentType(90), if (null === RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
+
+                bulb7_device = RgbwBulb7_Color
+                bulb7_value = new HSBType(new DecimalType(308.52), new PercentType(90), if (null === RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
+            }
         }
-        case MOOD_FESTIVE_STP: {
-            bulb1_device = RgbwBulb1_Color
-            bulb1_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
-
-            bulb2_device = RgbwBulb2_Color
-            bulb2_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
-
-            bulb3_device = RgbwBulb3_Color
-            bulb3_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
-
-            bulb4_device = RgbwBulb4_Color
-            bulb4_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
-        }
-        case MOOD_FESTIVE_JULY4: {
-            bulb1_device = RgbwBulb1_Color
-            bulb1_value = new HSBType(new DecimalType(0), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
-
-            bulb2_device = RgbwBulb2_Color
-            bulb2_value = new HSBType(new DecimalType(0), new PercentType(0), (RgbwBulb1_Color.state as HSBType).brightness);
-
-            bulb3_device = RgbwBulb3_Color
-            bulb3_value = new HSBType(new DecimalType(240), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
-
-            bulb4_device = RgbwBulb4_Color
-            bulb4_value = new HSBType(new DecimalType(240), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
-        }
+    }
+    catch (Throwable t) {
+        logError("mood_applier", "failed to compute mood values: " + t.getMessage())
     }
 
     try {
@@ -744,9 +866,12 @@ then
         bulb2_device.sendCommand(bulb2_value);
         bulb3_device.sendCommand(bulb3_value);
         bulb4_device.sendCommand(bulb4_value);
+        bulb5_device.sendCommand(bulb5_value);
+        bulb6_device.sendCommand(bulb4_value);
+        bulb7_device.sendCommand(bulb5_value);
     }
     catch (Throwable t) {
-        logError("mood_applier", "failed to complete setting up scene: " + t.getMessage())
+        logError("mood_applier", "failed to complete setting up mood: " + t.getMessage())
     }
     finally {
         //automationLock.unlock();
@@ -764,7 +889,7 @@ end
 rule "Kitchen Evening Lights On"
 when
     Time cron "0 0 17 ? * *" or
-    Item KitchenMultisensor_SensorLuminance changed
+    Item KitchenMultisensor_SensorLuminance received update
 then
     //the lights should come up to 'evening' level if the luminace gets below 30, or 
     //at 5pm, whichever comes first
@@ -787,6 +912,20 @@ then
                 lastStateReason.put(KitchenSinkLights_Switch.name, REASON_TIME);
                 lastStateDate.put(KitchenSinkLights_Switch.name, now);
             }
+
+            if (isOKToTurnOnBecause.apply(CounterLight_Dimmer, REASON_TIME, lastStateReason, lastStateDate)) {
+                CounterLight_Dimmer.sendCommand(100);
+                lastStateReason.put(CounterLight_Dimmer.name, REASON_TIME);
+                lastStateDate.put(CounterLight_Dimmer.name, now);
+            }
+
+            if (isOKToTurnOnBecause.apply(CoffeeLight_Switch, REASON_TIME, lastStateReason, lastStateDate)){
+                CoffeeLight_Switch.sendCommand(ON);
+                lastStateReason.put(CoffeeLight_Switch.name, REASON_TIME);
+                lastStateDate.put(CoffeeLight_Switch.name, now);
+            }
+
+
             Thread.sleep(200); //let everything catch up before turning off automatic updates
         }
         catch (Throwable t) {
@@ -801,11 +940,119 @@ end
 
 
 
+
+rule "Master Bedroom Luminance Manager"
+when
+    System started or
+    Time cron "0 */15 * ? * *"
+then
+    var Number time = now.getHourOfDay() * 100 + now.getMinuteOfHour();
+    var boolean isWeekend = now.getDayOfWeek() == 6 || now.getDayOfWeek == 7;
+    var boolean isWorkNight = now.getDayOfWeek != 5 && now.getDayOfWeek != 6;
+
+    var target = 0;
+
+    if (time > 800 && ((time < 1230 && isWeekend) || (time < 1100))) {
+        target = 40;
+    }
+    else if (time > 1100 && time < 1800) {
+        target = 10;
+    }
+    else if (time > 1800 && time < 2145 && isWorkNight) {
+        target = 60;
+    }
+    else if (time > 1800 && time < 2300 && ! isWorkNight) {
+        target = 60;
+    }
+
+    logDebug("bedroom_manager", "Master bedroom luminance target is now " + target.toString());
+
+    isUpdateAutomatic = 1;
+    if (isOKToTurnOnBecause.apply(vMasterBedroomLuminanceTarget, REASON_TIME, lastStateReason, lastStateDate)) {
+        vMasterBedroomLuminanceTarget.postUpdate(target);
+        lastStateReason.put(vMasterBedroomLuminanceTarget, REASON_TIME);
+        lastStateDate.put(vMasterBedroomLuminanceTarget, now);
+    }
+
+    Thread.sleep(200);
+    isUpdateAutomatic = 0;
+
+end
+
+
+rule "Master Bedroom Light Manager"
+when
+    Item MasterBedroomMultisensor_SensorLuminance received update or
+    Item vMasterBedroomLuminanceTarget received update
+then
+    if (MasterBedroomOverheadLight_Dimmer == null || MasterBedroomOverheadLight_Dimmer.state === null) {
+        logWarn("bedroom_applier", "dimmer state is null?");
+    }
+
+    if (MasterBedroomMultisensor_SensorLuminance === null || MasterBedroomMultisensor_SensorLuminance.state === null) {
+        logWarn("bedroom_applier", "luminance state is null? ABORTING");
+        return;
+    }
+
+    if (vMasterBedroomLuminanceTarget === null || vMasterBedroomLuminanceTarget.state === null) {
+        logWarn("bedroom_applier", "luminance target is null? ABORTING");
+        return;
+    }
+
+    var Number luminance = if (MasterBedroomMultisensor_SensorLuminance.state !== null) { MasterBedroomMultisensor_SensorLuminance.state as Number } else { 50 };
+    var Number dimlevel = if (MasterBedroomOverheadLight_Dimmer.state !== null) { MasterBedroomOverheadLight_Dimmer.state as Number } else {50};
+    var Number target = vMasterBedroomLuminanceTarget.state;
+
+    var Number newlevel = null;
+
+    logDebug("bedroom_applier", "target: " + target.toString());
+    logDebug("bedroom_applier", "current: " + luminance.toString());
+    logDebug("bedroom_applier", "dimmer: " + dimlevel.toString());
+
+    if (luminance + 5 < target ) {
+        newlevel = dimlevel + 5;
+        if (newlevel > 100) { newlevel = 100; }
+    }
+    else if (luminance - 5 > target) {
+        newlevel = dimlevel - 5;
+        if (newlevel < 0) { newlevel = 0; }
+    }
+
+    if(newlevel !== null) {
+        try {
+            logDebug("bedroom_applier", "Master bedroom dimmer setting will be " + newlevel.toString())
+            isUpdateAutomatic = 1;
+            if (isOKToTurnOnBecause.apply(MasterBedroomOverheadLight_Dimmer, REASON_WEATHER, lastStateReason, lastStateDate)) {
+                MasterBedroomOverheadLight_Dimmer.sendCommand(newlevel);
+                lastStateReason.put(MasterBedroomOverheadLight_Dimmer.name, REASON_WEATHER);
+                lastStateDate.put(MasterBedroomOverheadLight_Dimmer.name, now);
+                logInfo("bedroom_applier", "Master bedroom dimmer setting is now " + newlevel.toString());
+            }
+            else {
+                logWarn("bedroom_applier", "update to dimmer denied");
+            }
+        }
+        catch (Throwable t) {
+            logError("bedroom_applier", "error setting bedroom dimmer: " + t.getMessage());
+        }
+        finally {
+            Thread.sleep(200);
+            isUpdateAutomatic = 0;
+            logInfo("bedroom_applier", "done setting dimmer")
+        }
+    }
+    else {
+        logDebug("bedroom_applier", "no bedroom light level change needed");
+    }
+end
+
+
 rule "Nighttime"
 when
     Time cron "0 30 22 ? * MON,TUE,WED,THU,SUN *" or
     Time cron "0 59 23 ? * FRI,SAT *" or
-    Item Scene_NightLights received command ON
+    Item Scene_NightLights received command ON or
+    Item Scene_AllOff received command ON
 then
     //automationLock.lock()
     try {
@@ -833,6 +1080,7 @@ then
         ]
 
         Scene_NightLights.sendCommand(OFF);
+        Scene_AllOff.sendCommand(OFF);
 
         Thread.sleep(200);
     }
@@ -893,7 +1141,7 @@ when
     Time cron "0 45 8 ? * MON-FRI" or
     Time cron "0 15 9 ? * SAT,SUN"
 then
-    logInfo("bedroom blinds", "rule triggered")
+    logDebug("bedroom blinds", "rule triggered")
 
     //automationLock.lock()
     try {
@@ -1019,7 +1267,7 @@ then
    
 
     if (triggeringItem.state === ON && luminanceResult < 10) {
-        logInfo("nightlight", triggeringItem.name + " motion triggered with luminance in range");
+        logDebug("nightlight", triggeringItem.name + " motion triggered with luminance in range");
         //automationLock.lock()
         try {
             isUpdateAutomatic = 1;
@@ -1046,7 +1294,7 @@ then
         }
     }
     else if (triggeringItem.state === OFF) {
-        logInfo("nightlight", triggeringItem.name + " motion stopped");
+        logDebug("nightlight", triggeringItem.name + " motion stopped");
         lightsGroup.members.forEach[ i |
             //if this light isn't on by motion now, there's no point in scheduling the timer
             if (lastStateReason.get(i.name) !== REASON_MOTION) {
@@ -1065,7 +1313,7 @@ then
                     }
                 }
                 catch(Throwable t) {
-                    logWarn("nightlight off", t.getMessage())
+                    logWarn("nightlight off", "Caught Exception:" + t.getMessage())
                 }
                 finally{
                     isUpdateAutomatic = 0;

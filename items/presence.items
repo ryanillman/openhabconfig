@@ -12,6 +12,6 @@ Switch ForceRyanPresent "Ryan Presence Override" <location> (RyanPresent)
 Group:Switch:OR(ON,OFF) CaitPresent (SomeonePresent, EveryonePresent)
 
 Switch CaitInOwntracksRegion_Home "Caits Phone is Home" <location> (CaitPresent) { channel="mqtt:topic:223026e8:Owntracks_Cait_home"}
-Switch ForceCaitPresent "Cait Presence Override" <location> (CaitPresent)
+Switch ForceCaitPresent "Cait Presence Override" <location> (CaitPresent) 
 
 
