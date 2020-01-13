@@ -272,10 +272,10 @@ then
         logWarn("vIsLightOut", "failed to compute elevation from " + LocalSun_Position_Elevation.state)
     }
 
-    if ((luminance < 10 || elevation < 3) && vIsLightOut.state == ON) {
+    if ((luminance < 10 || elevation < 1) && vIsLightOut.state == ON) {
         vIsLightOut.postUpdate(OFF)
     }
-    else if ((luminance > 20 && elevation > 10) && vIsLightOut.state == OFF) {
+    else if ((luminance > 20 && elevation > 1) && vIsLightOut.state == OFF) {
         vIsLightOut.postUpdate(ON)
     }
 end
@@ -551,7 +551,7 @@ then
         }  
     }
 
-    logInfo("scenes", "setting scene " + vLivingroomScene.state);
+    logDebug("scenes", "setting scene " + vLivingroomScene.state);
     //automationLock.lock()
     try{
         isUpdateAutomatic = 1;
@@ -659,7 +659,7 @@ then
         return;
     }
 
-    logInfo("mood_applier", "mood changed " + vLivingroomMood.state);
+    logDebug("mood_applier", "mood changed " + vLivingroomMood.state);
     //could do this in an array, but it will eventually be a random list
     //of bulb ids; we're not doing them all just hte ones that are in the living room
     //100 = candellight, 0 = 6000k/daylight
@@ -1016,11 +1016,11 @@ then
     logDebug("bedroom_applier", "dimmer: " + dimlevel.toString());
 
     if (luminance + 5 < target ) {
-        newlevel = dimlevel + 5;
+        newlevel = dimlevel + ((target - luminance)/2);
         if (newlevel > 100) { newlevel = 100; }
     }
     else if (luminance - 5 > target) {
-        newlevel = dimlevel - 5;
+        newlevel = dimlevel - ((luminance - target) / 2);
         if (newlevel < 0) { newlevel = 0; }
     }
 
@@ -1032,7 +1032,7 @@ then
                 MasterBedroomOverheadLight_Dimmer.sendCommand(newlevel);
                 lastStateReason.put(MasterBedroomOverheadLight_Dimmer.name, REASON_WEATHER);
                 lastStateDate.put(MasterBedroomOverheadLight_Dimmer.name, now);
-                logInfo("bedroom_applier", "Master bedroom dimmer setting is now " + newlevel.toString());
+                logDebug("bedroom_applier", "Master bedroom dimmer setting is now " + newlevel.toString());
             }
             else {
                 logWarn("bedroom_applier", "update to dimmer denied");
@@ -1044,7 +1044,7 @@ then
         finally {
             Thread.sleep(200);
             isUpdateAutomatic = 0;
-            logInfo("bedroom_applier", "done setting dimmer")
+            logDebug("bedroom_applier", "done setting dimmer")
         }
     }
     else {
@@ -1064,19 +1064,15 @@ then
     try {
         isUpdateAutomatic = 1;
 
-        vLivingroomScene.postUpdate(SCENE_DARK);
-        lastStateReason.put(vLivingroomScene.name, REASON_GOODNIGHT);
-        lastStateDate.put(vLivingroomScene.name, now); 
-
         gGoodnightLights.members.forEach[ i | 
             if (isOKToTurnOffBecause.apply(i, REASON_GOODNIGHT, lastStateReason, lastStateDate)) {
                 if (i instanceof DimmerItem /*&& OFF !== i.state && 0 !== i.state*/) {
                     //it's a dimmer, and it's on - we'll set the dim level super low before turning it off
                     //so that when nighlights turn on they're not too bright
-                    i.sendCommand(15)
+                    i.sendCommand(12)
                 }
 
-		Thread.sleep(500); //hopefully enough time to let the change actuall propagate out
+		        Thread.sleep(500); //hopefully enough time to let the change actuall propagate out
 
                 i.sendCommand(OFF);
                 lastStateReason.put(i.name, REASON_GOODNIGHT);
@@ -1084,6 +1080,12 @@ then
             }
             true
         ]
+
+        createTimer(now.plusMinutes(1), [ | 
+            vLivingroomScene.postUpdate(SCENE_DARK);
+            lastStateReason.put(vLivingroomScene.name, REASON_GOODNIGHT);
+            lastStateDate.put(vLivingroomScene.name, now); 
+        ])
 
         Scene_NightLights.sendCommand(OFF);
         Scene_AllOff.sendCommand(OFF);
@@ -1280,7 +1282,7 @@ then
 
 
             lightsGroup.members.forEach[ i |
-                if (isOKToTurnOnBecause.apply(i, REASON_MOTION, lastStateReason, lastStateDate)) {
+                if (isOKToTurnOnBecause.apply(i, REASON_MOTION, lastStateReason, lastStateDate) && (OFF == i.state || 0 == i.state)) {
                     i.sendCommand(ON)
                     lastStateReason.put(i.name, REASON_MOTION)
                     lastStateDate.put(i.name, now)
