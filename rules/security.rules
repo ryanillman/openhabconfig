@@ -1,0 +1,6 @@
+rule "Arming Alarm raises DEFCON to 4"
+when 
+    Item vAlarmPanelState changed
+then
+    
+end

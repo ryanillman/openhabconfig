@@ -1,7 +1,7 @@
 Group LightingScenes
 Switch Scene_NightLights   "Night Lights"   (LightingScenes) [ "Switchable" ]
 Switch Scene_AllOff   "Goodnight Trigger"   (LightingScenes) [ "Switchable" ]
- 
+
 
 
 Group gLivingroomBlinds
@@ -56,3 +56,7 @@ String vItemReasonList "Item State Reason List"
 String vLivingroomMood  "Livingroom Lighting Mood/Color" (gTrackStateReason)
 String vLivingroomScene "Livingroom Lighting Scene" (gTrackStateReason)
 
+String vAlarmPanelState "Alarm Panel State" (gGlobalStates)
+Number vDEFCON "Defense Condition" (gGlobalStates)
+String vThreatType "Threat Type" (gGlobalStates)
+String vThreatLocation "Threat Location" (gGlobalStates)

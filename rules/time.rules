@@ -8,8 +8,8 @@ var Number blindsUnderManualControl = 0
 
 rule "Ryan's Alarm On"
 when
-  Time cron "0 0 5 ? * MON-FRI" or
-  Time cron "1 0 5 ? * MON-FRI"
+  Time cron "0 30 5 ? * MON-FRI" or
+  Time cron "1 30 5 ? * MON-FRI"
 then
   logInfo("ryans-alarm.rule", "In Ryan's Alarm")
 
