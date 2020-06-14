@@ -13,3 +13,15 @@ Group:Switch:OR(ON,OFF) CaitPresent (SomeonePresent, EveryonePresent)
 
 Switch CaitInOwntracksRegion_Home "Caits Phone is Home" <location> (CaitPresent) { channel="mqtt:topic:223026e8:Owntracks_Cait_home"}
 Switch ForceCaitPresent "Cait Presence Override" <location> (CaitPresent) 
+
+
+Group:Switch:OR(ON, OFF) RyanWorking "Ryan Working" (gPresence)
+Group:Switch:OR(ON, OFF) RyanInMeeting "Ryan in Meeting" (gPresence)
+
+
+Switch RyanWorking_Manual "Ryan Working Manual" (RyanWorking)
+Switch RyanWorking_Cal "Ryan Working via Calendar" (RyanWorking)
+Switch RyanWorking_Motion "Ryan Working via Motion" (RyanWorking)
+
+Switch RyanInMeeting_Manual "Ryan In Meeting Manual" (RyanInMeeting)
+Switch RyanInMeeting_Cal "Ryan In Meeting Manual" (RyanInMeeting)

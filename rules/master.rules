@@ -290,7 +290,7 @@ end
 rule "Morning Lights on weekday & weekend"
 when
   Time cron "0 0 6 ? * MON-FRI" or
-  Time cron "0 30 7 ? * SAT,SUN"
+  Time cron "0 30 7 ? * SAT,SUN" 
 then
     //automationLock.lock();
     try{
@@ -312,9 +312,10 @@ then
             lastStateReason.put(RyansOtherDeskLamp_Dimmer.name, REASON_TIME);
             lastStateDate.put(RyansOtherDeskLamp_Dimmer.name, now);   
 
-            RgbwBulb7_Color.sendCommand(100);
-            lastStateReason.put(RgbwBulb7_Color.name, REASON_TIME);
-            lastStateDate.put(RgbwBulb7_Color.name, now);   
+            RgbwBulb8_ColorTemperature.sendCommand(50)
+            RgbwBulb8_Color.sendCommand(100);
+            lastStateReason.put(RgbwBulb8_Color.name, REASON_TIME);
+            lastStateDate.put(RgbwBulb8_Color.name, now);   
         }
 
         CoffeeLight_Switch.sendCommand(ON);
@@ -982,6 +983,12 @@ then
                 lastStateDate.put(DiningroomLights_Dimmer.name, now);
             }
 
+            if (isOKToTurnOnBecause.apply(ChinaCabinet_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
+                ChinaCabinet_Dimmer.sendCommand(100);
+                lastStateReason.put(ChinaCabinet_Dimmer.name, REASON_TIME);
+                lastStateDate.put(ChinaCabinet_Dimmer.name, now);
+            }
+
 
             Thread.sleep(200); //let everything catch up before turning off automatic updates
         }
@@ -1056,6 +1063,13 @@ then
         return;
     }
 
+
+    //TODO: This should come from a whole-house mode flag
+    if (2100 < (now.getHourOfDay() * 100 + now.getMinuteOfHour())) {
+       logInfo("bedroom_applier", "it's after 9pm, the bedroom light is effectively under manual control");
+        return 
+    }
+
     var Number luminance = if (MasterBedroomMultisensor_SensorLuminance.state !== null) { MasterBedroomMultisensor_SensorLuminance.state as Number } else { 50 };
     var Number dimlevel = if (MasterBedroomOverheadLight_Dimmer.state !== null) { MasterBedroomOverheadLight_Dimmer.state as Number } else {50};
     var Number target = vMasterBedroomLuminanceTarget.state;
@@ -1117,14 +1131,6 @@ then
 
         gGoodnightLights.members.forEach[ i | 
             if (isOKToTurnOffBecause.apply(i, REASON_GOODNIGHT, lastStateReason, lastStateDate)) {
-                if (i instanceof DimmerItem /*&& OFF !== i.state && 0 !== i.state*/) {
-                    //it's a dimmer, and it's on - we'll set the dim level super low before turning it off
-                    //so that when nighlights turn on they're not too bright
-                    i.sendCommand(12)
-                }
-
-		        Thread.sleep(500); //hopefully enough time to let the change actuall propagate out
-
                 i.sendCommand(OFF);
                 lastStateReason.put(i.name, REASON_GOODNIGHT);
                 lastStateDate.put(i.name, now);
@@ -1132,11 +1138,11 @@ then
             true
         ]
 
-        createTimer(now.plusMinutes(1), [ | 
-            vLivingroomScene.postUpdate(SCENE_DARK);
-            lastStateReason.put(vLivingroomScene.name, REASON_GOODNIGHT);
-            lastStateDate.put(vLivingroomScene.name, now); 
-        ])
+        
+        vLivingroomScene.postUpdate(SCENE_DARK);
+        lastStateReason.put(vLivingroomScene.name, REASON_GOODNIGHT);
+        lastStateDate.put(vLivingroomScene.name, now); 
+        
 
         Scene_NightLights.sendCommand(OFF);
         Scene_AllOff.sendCommand(OFF);
@@ -1285,6 +1291,12 @@ then
             DeckLights_Switch.sendCommand(ON);
             lastStateReason.put(DeckLights_Switch.name, REASON_WEATHER);
             lastStateDate.put(DeckLights_Switch.name, now);
+        }
+
+        if (isOKToTurnOnBecause.apply(PorchLights_Switch, REASON_WEATHER, lastStateReason, lastStateDate)){
+            PorchLights_Switch.sendCommand(ON);
+            lastStateReason.put(PorchLights_Switch.name, REASON_WEATHER);
+            lastStateDate.put(PorchLights_Switch.name, now);
         }
 
         Thread.sleep(200);  

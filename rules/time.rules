@@ -63,5 +63,56 @@ end
 
 
 
+rule "Set Ryan's working status"
+when 
+  Time cron "0 30 6 ? * MON-FRI "
+then
+  logDebug("ryan_work_light", "workin' time");
+  RyanWorking_Manual.postUpdate(ON);
+end
 
+
+rule "Clear Ryan's working status"
+when 
+  Time cron "0 0 18 ? * * "
+then
+  logDebug("ryan_work_light", "resetting flags");
+  RyanInMeeting_Manual.postUpdate(OFF);
+  RyanInMeeting_Cal.postUpdate(OFF);
+  
+  RyanWorking_Manual.postUpdate(OFF);
+  RyanWorking_Cal.postUpdate(OFF);
+  RyanWorking_Motion.postUpdate(OFF);
+end
+
+rule "turn off Ryan's work light"
+when
+  Time cron "0 0 22 ? * *"
+then
+  logDebug("ryan_work_light", "turning off because it's evening");
+  RgbwBulb8_Color.sendCommand(0);
+end
+
+
+rule "Ryan Working Status Light"
+when
+  Item RyanWorking changed or
+  Item RyanInMeeting changed
+then
+  logDebug("ryan_work_light", "something changed " + triggeringItem.name);
+
+  if (ON == RyanInMeeting.state) {
+    logDebug("ryan_work_light", "in a meeting");
+    RgbwBulb8_Color.sendCommand(new HSBType(new DecimalType(0), new PercentType(100), new PercentType(100)));
+  }
+  else if (ON == RyanWorking.state) {
+    logDebug("ryan_work_light", "working");
+    RgbwBulb8_Color.sendCommand(new HSBType(new DecimalType(40), new PercentType(100), new PercentType(100)));
+  }
+  else {
+    logDebug("ryan_work_light", "not working");
+    RgbwBulb8_ColorTemperature.sendCommand(50)
+    RgbwBulb8_Color.sendCommand(100);
+  }
+end
 
