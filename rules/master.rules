@@ -52,10 +52,27 @@ val org.eclipse.xtext.xbase.lib.Functions$Function4 <GenericItem, String, HashMa
     
     //90 minutes seems like a good wait time for manual overrides. we'll see how it goes
     //this will probably come from group membership or something
-    var DateTime oldTime = itemTime.get(item.name);
-    if (oldTime === null) { oldTime = now; }
-    val boolean manualTimeExpired    = now.minusMinutes(90).isAfter(oldTime);
-    var boolean goodnightTimeExpired = now.getDayOfMonth() != oldTime.getDayOfMonth(); 
+    var DateTime oldTime
+    try {
+        itemTime.get(item.name);
+        if (oldTime === null) { oldTime = now; }
+    } catch (Throwable t) {
+        logWarn("isOKToTurnOn", "Failed getting a time:" + t.getMessage())
+        oldTime = now
+    }
+
+    var boolean manualTimeExpired = false
+    var boolean goodnightTimeExpired = false
+
+    try{
+        manualTimeExpired    = now.minusMinutes(90).isAfter(oldTime);
+        goodnightTimeExpired = now.getDayOfMonth() != oldTime.getDayOfMonth(); 
+    }
+    catch (Throwable t) {
+        logWarn("isOKToTurnOn", "Failed doing time comparisons:" + t.getMessage())
+        manualTimeExpired = true
+        goodnightTimeExpired = true
+    }
 
     var boolean retval = true;
 
@@ -106,9 +123,27 @@ val org.eclipse.xtext.xbase.lib.Functions$Function4<GenericItem, String, HashMap
     
     //90 minutes seems like a good wait time for manual overrides. we'll see how it goes
     //this will probably come from group membership or something
-    var DateTime oldTime = itemTime.get(item.name);
-    if (oldTime === null) { oldTime = now; }
-    val boolean manualTimeExpired  = now.minusMinutes(90).isAfter(oldTime);
+    var DateTime oldTime
+    try {
+        itemTime.get(item.name);
+        if (oldTime === null) { oldTime = now; }
+    } catch (Throwable t) {
+        logWarn("isOKToTurnOFF", "Failed getting a time:" + t.getMessage())
+        oldTime = now
+    }
+
+    var boolean manualTimeExpired = false
+    var boolean goodnightTimeExpired = false
+
+    try{
+        manualTimeExpired    = now.minusMinutes(90).isAfter(oldTime);
+        goodnightTimeExpired = now.getDayOfMonth() != oldTime.getDayOfMonth(); 
+    }
+    catch (Throwable t) {
+        logWarn("isOKToTurnOFF", "Failed doing time comparisons:" + t.getMessage())
+        manualTimeExpired = true
+        goodnightTimeExpired = true
+    }
 
     var boolean retval = true;
 
@@ -159,25 +194,27 @@ rule "gTrackStateReason item changed so track manual state"
 when
     Member of gTrackStateReason received command
 then
+    var DateTime oldTime = null;
+    var String oldReason = null;
+    var boolean isRecentChange = null;
+    var boolean appearsToBeManual = null;
+
     //this rule is all about tracking manual state changes
     //whoever is automatically changing state will be doing
     //this housekeeping
-    var DateTime oldTime = lastStateDate.get(triggeringItem.name);
-    var String oldReason = lastStateReason.get(triggeringItem.name);
-    if (oldTime === null) { oldTime = now.minusMinutes(99); }
-    if (oldReason === null) { oldReason = ""; }
-    val boolean isRecentChange  = now.minusSeconds(2).isBefore(oldTime);
+    try {
+        oldTime = lastStateDate.get(triggeringItem.name);
+        oldReason = lastStateReason.get(triggeringItem.name);
+        isRecentChange  = now.minusSeconds(2).isBefore(oldTime);
+    }
+    catch(Throwable t) {
+        logError("gTrackStateReason", "caught error trying to figure out recency" + t.getMessage())
+        if (oldTime === null) { oldTime = now.minusMinutes(99); }
+        if (oldReason === null) { oldReason = ""; }
+        isRecentChange = true
+    }
 
-    val boolean appearsToBeManual = isUpdateAutomatic != 1 && ! isRecentChange;
-
-    
-
-    //logDebug("gTrackStateReason", "item " + triggeringItem.name + " received command, checking to see if it was manual");
-    //logDebug("gTrackStateReason", "isUpdateAutomatic flag: " + isUpdateAutomatic.toString());
-    //logDebug("gTrackStateReason", "old reason: " + oldReason.toString());
-    //logDebug("gTrackStateReason", "old time: " + oldTime.toString());
-    //logDebug("gTrackStateReason", "is recent change: " + isRecentChange.toString());
-    //logDebug("gTrackStateReason", "appears to be manual: " + appearsToBeManual.toString());
+    appearsToBeManual = isUpdateAutomatic != 1 && ! isRecentChange;
 
     if (appearsToBeManual && REASON_HEALTH_SAFETY == oldReason){
         //request denied
@@ -233,7 +270,7 @@ then
 
             item.sendCommand(OFF);
             lastStateReason.put(item.name, REASON_TIMER);
-            lastStateDate.put(item.name, now.toString());
+            lastStateDate.put(item.name, now);
 
             Thread.sleep(200); //guess to let things get caught up
         }
@@ -415,11 +452,11 @@ then
             if (isOKToTurnOnBecause.apply(vLivingroomMood, REASON_TIME, lastStateReason, lastStateDate)){
                 logDebug("mood_manager", "new mood applied " + newMood);
                 vLivingroomMood.postUpdate(newMood);
-                lastStateReason.put(BarLights_Dimmer.name, REASON_TIME);
-                lastStateDate.put(BarLights_Dimmer.name, now);
+                lastStateReason.put(vLivingroomMood.name, REASON_TIME);
+                lastStateDate.put(vLivingroomMood.name, now);
             }
             else {
-                logInfo("mood_manager", "mood change BLOCKED! would have done " + newMood + "but "+currentMood + " was set manually");
+                logError("mood_manager", "mood change BLOCKED! would have done " + newMood + "but "+currentMood + " was set manually");
             }
 
             Thread.sleep(200); //let everything catch up before turning off automatic updates
@@ -494,6 +531,8 @@ then
   }
   else {
       reason = REASON_TIME;
+      lastStateReason.put(vLivingroomScene.name, reason);
+      lastStateDate.put(vLivingroomScene.name, now);
       logError("scenes", "failed to find vLivingroomScene reason, going with time 'cause why not");
   }
 
@@ -787,91 +826,91 @@ then
             }
             case MOOD_FESTIVE_XMAS: {
                 bulb1_device = RgbwBulb1_Color
-                bulb1_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
+                bulb1_value = new HSBType(new DecimalType(0), new PercentType(100), if (NULL ==  RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
 
                 bulb2_device = RgbwBulb2_Color
-                bulb2_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
+                bulb2_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
 
                 bulb3_device = RgbwBulb3_Color
-                bulb3_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
+                bulb3_value = new HSBType(new DecimalType(0), new PercentType(100), if (NULL ==  RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
 
                 bulb4_device = RgbwBulb4_Color
-                bulb4_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
+                bulb4_value = new HSBType(new DecimalType(0), new PercentType(100), if (NULL ==  RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
 
                 bulb5_device = RgbwBulb5_Color
-                bulb5_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
+                bulb5_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
 
                 bulb6_device = RgbwBulb6_Color
-                bulb6_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
+                bulb6_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
 
                 bulb7_device = RgbwBulb7_Color
-                bulb7_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
+                bulb7_value = new HSBType(new DecimalType(0), new PercentType(100), if (NULL ==  RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
             }
             case MOOD_FESTIVE_STP: {
                 bulb1_device = RgbwBulb1_Color
-                bulb1_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
+                bulb1_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
 
                 bulb2_device = RgbwBulb2_Color
-                bulb2_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
+                bulb2_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
 
                 bulb3_device = RgbwBulb3_Color
-                bulb3_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
+                bulb3_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
 
                 bulb4_device = RgbwBulb4_Color
-                bulb4_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
+                bulb4_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
 
                 bulb5_device = RgbwBulb5_Color
-                bulb5_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
+                bulb5_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
 
                 bulb6_device = RgbwBulb6_Color
-                bulb6_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
+                bulb6_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
 
                 bulb7_device = RgbwBulb7_Color
-                bulb7_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
+                bulb7_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
             }
             case MOOD_FESTIVE_JULY4: {
                 bulb1_device = RgbwBulb1_Color
-                bulb1_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
+                bulb1_value = new HSBType(new DecimalType(0), new PercentType(100), new PercentType(100));
 
                 bulb2_device = RgbwBulb2_Color
-                bulb2_value = new HSBType(new DecimalType(0), new PercentType(0), if (null === RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
+                bulb2_value = new HSBType(new DecimalType(0), new PercentType(0), new PercentType(100));
 
                 bulb3_device = RgbwBulb3_Color
-                bulb3_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
+                bulb3_value = new HSBType(new DecimalType(0), new PercentType(100), new PercentType(100));
 
                 bulb4_device = RgbwBulb4_Color
-                bulb4_value = new HSBType(new DecimalType(240), new PercentType(100), if (null === RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
+                bulb4_value = new HSBType(new DecimalType(240), new PercentType(100), new PercentType(100));
 
                 bulb5_device = RgbwBulb5_Color
-                bulb5_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
+                bulb5_value = new HSBType(new DecimalType(0), new PercentType(100), new PercentType(100));
 
                 bulb6_device = RgbwBulb6_Color
-                bulb6_value = new HSBType(new DecimalType(240), new PercentType(0), if (null === RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
+                bulb6_value = new HSBType(new DecimalType(240), new PercentType(0), new PercentType(100));
 
                 bulb7_device = RgbwBulb7_Color
-                bulb7_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
+                bulb7_value = new HSBType(new DecimalType(240), new PercentType(100), new PercentType(100));
             }
             case MOOD_FESTIVE_EASTER: {
                 bulb1_device = RgbwBulb1_Color
-                bulb1_value = new HSBType(new DecimalType(0), new PercentType(90), if (null === RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
+                bulb1_value = new HSBType(new DecimalType(0), new PercentType(90), if (NULL ==  RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
 
                 bulb2_device = RgbwBulb2_Color
-                bulb2_value = new HSBType(new DecimalType(51.42), new PercentType(90), if (null === RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
+                bulb2_value = new HSBType(new DecimalType(51.42), new PercentType(90), if (NULL ==  RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
 
                 bulb3_device = RgbwBulb3_Color
-                bulb3_value = new HSBType(new DecimalType(102.84), new PercentType(90), if (null === RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
+                bulb3_value = new HSBType(new DecimalType(102.84), new PercentType(90), if (NULL ==  RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
 
                 bulb4_device = RgbwBulb4_Color
-                bulb4_value = new HSBType(new DecimalType(154.26), new PercentType(90), if (null === RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
+                bulb4_value = new HSBType(new DecimalType(154.26), new PercentType(90), if (NULL ==  RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
 
                 bulb5_device = RgbwBulb5_Color
-                bulb5_value = new HSBType(new DecimalType(205.68), new PercentType(90), if (null === RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
+                bulb5_value = new HSBType(new DecimalType(205.68), new PercentType(90), if (NULL ==  RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
 
                 bulb6_device = RgbwBulb6_Color
-                bulb6_value = new HSBType(new DecimalType(257.1), new PercentType(90), if (null === RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
+                bulb6_value = new HSBType(new DecimalType(257.1), new PercentType(90), if (NULL ==  RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
 
                 bulb7_device = RgbwBulb7_Color
-                bulb7_value = new HSBType(new DecimalType(308.52), new PercentType(90), if (null === RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
+                bulb7_value = new HSBType(new DecimalType(308.52), new PercentType(90), if (NULL ==  RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
             }
         }
     }
@@ -930,8 +969,6 @@ then
     }
 
 end
-
-
 
 
 
@@ -1049,7 +1086,7 @@ when
     Item MasterBedroomMultisensor_SensorLuminance received update or
     Item vMasterBedroomLuminanceTarget received update
 then
-    if (MasterBedroomOverheadLight_Dimmer == null || MasterBedroomOverheadLight_Dimmer.state === null) {
+    if (MasterBedroomOverheadLight_Dimmer === null || MasterBedroomOverheadLight_Dimmer.state === null) {
         logWarn("bedroom_applier", "dimmer state is null?");
     }
 
@@ -1377,6 +1414,9 @@ then
         lightsGroup.members.forEach[ i |
             //if this light isn't on by motion now, there's no point in scheduling the timer
             if (lastStateReason.get(i.name) !== REASON_MOTION) {
+                //but still kill any running timer!!!
+                if(autoOffTimers.get(i.name)) {autoOffTimers.get(i.name).cancel();}
+                autoOffTimers.put(i.name, null)
                 return;
             }
 
@@ -1390,6 +1430,7 @@ then
                         i.sendCommand(OFF)
                         lastStateReason.put(i.name, REASON_MOTION)
                         lastStateDate.put(i.name, now)
+                        if(autoOffTimers.get(i.name)) {autoOffTimers.get(i.name).cancel();}
                         autoOffTimers.put(i.name, null)
                     }
                 }
@@ -1397,6 +1438,7 @@ then
                     logWarn("nightlight off", "Caught Exception:" + t.getMessage())
                 }
                 finally{
+                    Thread.sleep(200);
                     isUpdateAutomatic = 0;
                     //automationLock.unlock();
                 }

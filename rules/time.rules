@@ -103,16 +103,16 @@ then
 
   if (ON == RyanInMeeting.state) {
     logDebug("ryan_work_light", "in a meeting");
-    RgbwBulb8_Color.sendCommand(new HSBType(new DecimalType(0), new PercentType(100), new PercentType(100)));
+    RgbwBulb8_Color.sendCommand(new HSBType(new DecimalType(0), new PercentType(100), new PercentType(50)));
   }
   else if (ON == RyanWorking.state) {
     logDebug("ryan_work_light", "working");
-    RgbwBulb8_Color.sendCommand(new HSBType(new DecimalType(40), new PercentType(100), new PercentType(100)));
+    RgbwBulb8_Color.sendCommand(new HSBType(new DecimalType(40), new PercentType(100), new PercentType(50)));
   }
   else {
     logDebug("ryan_work_light", "not working");
     RgbwBulb8_ColorTemperature.sendCommand(50)
-    RgbwBulb8_Color.sendCommand(100);
+    RgbwBulb8_Color.sendCommand(50);
   }
 end
 

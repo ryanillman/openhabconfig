@@ -44,7 +44,6 @@ Group gGlobalStates
 Switch State_isNight "Is Night" (gGlobalStates)
 
 
-
 Number WindSpeedMph        "Windspeed [%.0f mph]"  <windspeed>      (Weather) { channel="openweathermap:weather-and-forecast:f16b7484:local:current#wind-speed" }
 Number AtmoPressureInHg    "Pressure [%.2f inHg]"  <pressure>       (Weather) { channel="openweathermap:weather-and-forecast:f16b7484:local:current#pressure" }
 
