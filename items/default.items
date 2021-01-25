@@ -14,10 +14,10 @@ Group gGoodnightLights
 Group gAutoOff
 Group gManualOverride
 Group gAutoOff_60
+Group gAutoOff_30
 Group gAutoOff_5
 
 Group gTrackStateReason
-
 
 Group gNightlight_Livingroom_Sensor      //thing that trips on motion
 Group gNightlight_Livingroom_Luminance   //decides if its dark enough
