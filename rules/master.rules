@@ -868,25 +868,25 @@ then
             }
             case MOOD_FESTIVE_STP: {
                 bulb1_device = RgbwBulb1_Color
-                bulb1_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
+                bulb1_value = new HSBType(new DecimalType(120), new PercentType(90), new PercentType(100));
 
                 bulb2_device = RgbwBulb2_Color
-                bulb2_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
+                bulb2_value = new HSBType(new DecimalType(120), new PercentType(90), new PercentType(100));
 
                 bulb3_device = RgbwBulb3_Color
-                bulb3_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
+                bulb3_value = new HSBType(new DecimalType(120), new PercentType(90), new PercentType(100));
 
                 bulb4_device = RgbwBulb4_Color
-                bulb4_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
+                bulb4_value = new HSBType(new DecimalType(120), new PercentType(90), new PercentType(100));
 
                 bulb5_device = RgbwBulb5_Color
-                bulb5_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
+                bulb5_value = new HSBType(new DecimalType(120), new PercentType(90), new PercentType(100));
 
                 bulb6_device = RgbwBulb6_Color
-                bulb6_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
+                bulb6_value = new HSBType(new DecimalType(120), new PercentType(90), new PercentType(100));
 
                 bulb7_device = RgbwBulb7_Color
-                bulb7_value = new HSBType(new DecimalType(120), new PercentType(90), if (NULL ==  RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
+                bulb7_value = new HSBType(new DecimalType(120), new PercentType(90), new PercentType(100));
             }
             case MOOD_FESTIVE_JULY4: {
                 bulb1_device = RgbwBulb1_Color
@@ -912,25 +912,25 @@ then
             }
             case MOOD_FESTIVE_EASTER: {
                 bulb1_device = RgbwBulb1_Color
-                bulb1_value = new HSBType(new DecimalType(0), new PercentType(90), if (NULL ==  RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
+                bulb1_value = new HSBType(new DecimalType(0), new PercentType(90), new PercentType(100));
 
                 bulb2_device = RgbwBulb2_Color
-                bulb2_value = new HSBType(new DecimalType(51.42), new PercentType(90), if (NULL ==  RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
+                bulb2_value = new HSBType(new DecimalType(51.42), new PercentType(90), new PercentType(100));
 
                 bulb3_device = RgbwBulb3_Color
-                bulb3_value = new HSBType(new DecimalType(102.84), new PercentType(90), if (NULL ==  RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
+                bulb3_value = new HSBType(new DecimalType(102.84), new PercentType(90), new PercentType(100));
 
                 bulb4_device = RgbwBulb4_Color
-                bulb4_value = new HSBType(new DecimalType(154.26), new PercentType(90), if (NULL ==  RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
+                bulb4_value = new HSBType(new DecimalType(154.26), new PercentType(90), new PercentType(100));
 
                 bulb5_device = RgbwBulb5_Color
-                bulb5_value = new HSBType(new DecimalType(205.68), new PercentType(90), if (NULL ==  RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
+                bulb5_value = new HSBType(new DecimalType(205.68), new PercentType(90), new PercentType(100));
 
                 bulb6_device = RgbwBulb6_Color
-                bulb6_value = new HSBType(new DecimalType(257.1), new PercentType(90), if (NULL ==  RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
+                bulb6_value = new HSBType(new DecimalType(257.1), new PercentType(90), new PercentType(100));
 
                 bulb7_device = RgbwBulb7_Color
-                bulb7_value = new HSBType(new DecimalType(308.52), new PercentType(90), if (NULL ==  RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
+                bulb7_value = new HSBType(new DecimalType(308.52), new PercentType(90), new PercentType(100));
             }
             case MOOD_FESTIVE_HALOWN: {
                 bulb1_device = RgbwBulb1_Color
