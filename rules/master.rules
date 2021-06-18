@@ -13,7 +13,7 @@ val String REASON_TIMER         = "timer"
 val String REASON_OTHER         = "other"
 val String REASON_GOODNIGHT     = "goodnight"
 
-
+/** Livingroom Scenes */
 val String SCENE_MORNING   = "morning"
 val String SCENE_NORMAL    = "normal"
 val String SCENE_HALFNORMAL= "halfnormal"
@@ -22,7 +22,7 @@ val String SCENE_MOVIE     = "movie"
 val String SCENE_COZY      = "cozy"
 val String SCENE_DARK      = "dark"
 
-
+/** Livingroom Moods */
 val String MOOD_MORNING        = "morning"
 val String MOOD_AFTERNOON      = "afternoon"
 val String MOOD_EARLY_EVENING  = "early_evening"
@@ -37,9 +37,22 @@ val String MOOD_FESTIVE_JULY4  = "july4"
 val String MOOD_FESTIVE_EASTER = "easter"
 val String MOOD_FESTIVE_HALOWN = "halloween"
 
+
+/** Kitchen Scenes */
+val String SCENE_K_EARLY_MORNING = "earlymorning"
+val String SCENE_K_LATE_MORNING  = "latemorning"
+val String SCENE_K_AFTERNOON     = "afternoon"
+val String SCENE_K_COOKING       = "cooking"
+val String SCENE_K_DINNER        = "dinner"
+val String SCENE_K_EVENING       = "evening"
+val String SCENE_K_DARK          = "dark"
+
+
 val HashMap<String, String>   lastStateReason = newHashMap()
 val HashMap<String, ZonedDateTime> lastStateDate   = newHashMap()
 val HashMap<String, Timer>    autoOffTimers   = newHashMap()
+
+val java.util.Random rand = new java.util.Random
 
 //val ReentrantLock automationLock = null //new ReentrantLock()
 
@@ -356,8 +369,8 @@ end
 
 rule "Morning Lights on weekday & weekend"
 when
-  Time cron "0 0 6 ? * MON-FRI" or
-  Time cron "0 30 7 ? * SAT,SUN" 
+  Time cron "0 45 5 ? * MON-FRI" or
+  Time cron "0 00 7 ? * SAT,SUN" 
 then
     //automationLock.lock();
     try{
@@ -368,6 +381,9 @@ then
         lastStateReason.put(vLivingroomScene.name, REASON_TIME);
         lastStateDate.put(vLivingroomScene.name, now);
 
+        vKitchenScene.postUpdate(SCENE_K_EARLY_MORNING);
+        lastStateReason.put(vKitchenScene.name, REASON_TIME);
+        lastStateDate.put(vKitchenScene.name, now);
 
         if (now.getDayOfWeek().getValue() < 6 && RyanPresent.state == ON) {         
             RyansDeskLamp_Dimmer.sendCommand(40);
@@ -383,13 +399,10 @@ then
             RgbwBulb8_Color.sendCommand(100);
             lastStateReason.put(RgbwBulb8_Color.name, REASON_TIME);
             lastStateDate.put(RgbwBulb8_Color.name, now);   
-        }
+        }        
 
-        CoffeeLight_Dimmer.sendCommand(100);
-        lastStateReason.put(CoffeeLight_Dimmer.name, REASON_TIME);
-        lastStateDate.put(CoffeeLight_Dimmer.name, now);
-
-        CoffeeLight_Temperature2.sendCommand(100);
+        //Choose a random color for the kitchen mood
+        vKitchenMoodColor.sendCommand(new HSBType(new DecimalType(rand.nextInt(360)), new PercentType(30 + rand.nextInt(50)), new PercentType(100)));
     }
     catch (Throwable t) {
         logError("morning_lights", t.getMessage())
@@ -402,41 +415,182 @@ end
 
 
 
-rule "Drinking Time"
+rule "Kitchen Scene Manager"
 when
-  Time cron "0 0 12 ? * * "  or
-  Time cron "0 0 13 ? * * "
+  System started or
+  Time cron "0 0 5  ? * * " or
+  Time cron "0 0 9  ? * * " or
+  Time cron "0 0 12 ? * * " or
+  Time cron "0 0 17 ? * * " or
+  Time cron "0 0 19 ? * * " or
+  Item KitchenMultisensor_SensorLuminance received update
 then
+    var Number hour = now.getHour();
+    var Number day  = now.getDayOfWeek().getValue();
+    var Number luminance = KitchenMultisensor_SensorLuminance.state as Number;
+
+
+    var String oldScene = vKitchenScene.state.toString();
+    var String newScene = SCENE_K_DARK;
+
+    if (hour >= 5 && hour < 9) {
+        newScene = SCENE_K_EARLY_MORNING;
+    }
+    else if (hour >= 9 && hour < 12) {
+        newScene = SCENE_K_LATE_MORNING;
+    }
+    else if (((hour >= 14 && hour < 17) && luminance < 35) || hour == 17) {
+        newScene = SCENE_K_COOKING;
+    }
+    else if (hour >= 12 && oldScene != SCENE_K_COOKING) {
+        newScene = SCENE_K_AFTERNOON;
+    }
+    else if (hour >= 19 && oldScene != SCENE_K_DARK) {
+        newScene = SCENE_K_EVENING;
+    }
+
     //automationLock.lock()
     try {
         isUpdateAutomatic += 1;
 
-        if (isOKToTurnOffBecause.apply(CoffeeLight_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-            CoffeeLight_Dimmer.sendCommand(0);
-            lastStateReason.put(CoffeeLight_Dimmer.name, REASON_TIME);
-            lastStateDate.put(CoffeeLight_Dimmer.name, now);
-        }
-
-        if (isOKToTurnOnBecause.apply(CoffeeLight_Color, REASON_TIME, lastStateReason, lastStateDate)){
-            CoffeeLight_Color.sendCommand(new HSBType(new DecimalType(290), new PercentType(50), new PercentType(90)););
-            lastStateReason.put(CoffeeLight_Color.name, REASON_TIME);
-            lastStateDate.put(CoffeeLight_Color.name, now);
-        }
-
-        if (isOKToTurnOnBecause.apply(BarLights_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-            BarLights_Dimmer.sendCommand(ON);
-            lastStateReason.put(BarLights_Dimmer.name, REASON_TIME);
-            lastStateDate.put(BarLights_Dimmer.name, now);
+        if (isOKToTurnOnBecause.apply(vKitchenScene, REASON_TIME, lastStateReason, lastStateDate)){
+            vKitchenScene.postUpdate(newScene);
+            lastStateReason.put(vKitchenScene.name, REASON_TIME);
+            lastStateDate.put(vKitchenScene.name, now);
         }
     }
     catch (Throwable t) {
-        logError("DrinkingTime", t.getMessage())
+        logError("Kitchen Scene Manager", t.getMessage())
     }
     finally {
         createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
         //automationLock.unlock()
     }
 end
+
+rule "Kitchen Scene Applier"
+when
+    Item vKitchenScene changed or
+    Item vKitchenMoodColor changed 
+then
+    var sinkLights = OFF;
+    var HSBType coffeeColor = new HSBType(new DecimalType(0), new PercentType(0), new PercentType(0));
+    var int coffeeLights = 0;
+    var int coffeeTemp = 0;
+    var int barLights = 0;
+    var int diningroomLights = 0;
+    var int chinaLights = 0;
+
+    var String reason;
+
+    logInfo("kitchen_scene_applier", "starting setup of kitchen scene");
+
+    try {
+        if (null !== lastStateReason.get(vLivingroomScene.name) && REASON_MANUAL !== lastStateReason.get(vLivingroomScene.name)) {
+            reason = lastStateReason.get(vLivingroomScene.name);
+        }
+        else {
+            reason = REASON_TIME;
+        }
+    }
+    catch(Throwable t) {
+        reason = REASON_TIME;
+    }
+
+    switch(vKitchenScene.state.toString()){
+        case SCENE_K_EARLY_MORNING: {
+            coffeeLights     = 100;
+            coffeeTemp       = 100;
+            }
+        case SCENE_K_LATE_MORNING: {
+            coffeeLights     = 100;
+            coffeeTemp       = 50;
+            }
+        case SCENE_K_AFTERNOON: {
+            coffeeColor      = vKitchenMoodColor.state as HSBType;
+            barLights        = 100;
+            chinaLights      = 50;
+            }
+        case SCENE_K_COOKING: {
+            sinkLights       = ON;
+            coffeeLights     = 100;
+            coffeeTemp       = 100;
+            barLights        = 100;
+            diningroomLights = 50;
+            chinaLights      = 100;
+            }
+        case SCENE_K_DINNER: {
+            coffeeColor      = vKitchenMoodColor.state as HSBType;
+            barLights        = 100;
+            diningroomLights = 100;
+            chinaLights      = 100;
+            }
+        case SCENE_K_EVENING: {
+            sinkLights       = ON;
+            coffeeColor      = vKitchenMoodColor.state as HSBType;
+            coffeeTemp       = 100;
+            barLights        = 100;
+            diningroomLights = 50;
+            chinaLights      = 100;
+            }
+    }
+
+    try {
+        isUpdateAutomatic += 1;
+        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
+    }
+    catch (Throwable t) {
+        logError("kitchen_scene_applier", "Failed to set isUpdateAutomatic, this will look like a manual change");
+    }
+
+    try {
+        KitchenSinkLights_Switch.sendCommand(sinkLights);
+        lastStateReason.put(KitchenSinkLights_Switch.name, reason);
+        lastStateDate.put(KitchenSinkLights_Switch.name, now);
+    } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set sink lights: " + t.getMessage());}
+
+    try {
+        CoffeeLight_Color.sendCommand(coffeeColor as HSBType);
+        lastStateReason.put(CoffeeLight_Color.name, reason);
+        lastStateDate.put(CoffeeLight_Color.name, now);
+    } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set coffee color: " + t.getMessage());}
+
+    try {
+        CoffeeLight_Dimmer.sendCommand(coffeeLights);
+        lastStateReason.put(CoffeeLight_Dimmer.name, reason);
+        lastStateDate.put(CoffeeLight_Dimmer.name, now);
+    } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set coffee dimmer: " + t.getMessage());}
+
+    try {
+        CoffeeLight_Temperature2.sendCommand(coffeeTemp);
+        lastStateReason.put(CoffeeLight_Temperature2.name, reason);
+        lastStateDate.put(CoffeeLight_Temperature2.name, now);
+    } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set coffee temp: " + t.getMessage());}
+
+
+    try {
+        BarLights_Dimmer.sendCommand(barLights);
+        lastStateReason.put(BarLights_Dimmer.name, reason);
+        lastStateDate.put(BarLights_Dimmer.name, now);
+    } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set bar lights: " + t.getMessage());}
+
+    try {
+        DiningroomLights_Dimmer.sendCommand(diningroomLights);
+        lastStateReason.put(DiningroomLights_Dimmer.name, reason);
+        lastStateDate.put(DiningroomLights_Dimmer.name, now);
+    } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set diningroom lights: " + t.getMessage());}
+
+    try {
+        ChinaCabinet_Dimmer.sendCommand(chinaLights);
+        lastStateReason.put(ChinaCabinet_Dimmer.name, reason);
+        lastStateDate.put(ChinaCabinet_Dimmer.name, now);
+    } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set china cabinet lights: " + t.getMessage());}
+
+    logInfo("kitchen_scene_applier", "finishsed setting up kitchen scene");
+end
+
+
+
 
 rule "Livingroom Mood Manager"
 when
@@ -447,7 +601,7 @@ then
     var Number hour = now.getHour();
     var Number month = now.getMonthValue();
     var Number day = now.getDayOfMonth();
-    var boolean isWorkNight = now.getDayOfWeek() != 5 && now.getDayOfWeek() != 6;
+    var boolean isWorkNight = now.getDayOfWeek().getValue() != 5 && now.getDayOfWeek().getValue() != 6;
     var String newMood = null;
 
 
@@ -995,75 +1149,6 @@ end
 
 
 
-
-
-rule "Kitchen Evening Lights On"
-when
-    Time cron "0 0 17 ? * *" or
-    Item KitchenMultisensor_SensorLuminance received update
-then
-    //the lights should come up to 'evening' level if the luminace gets below 30, or 
-    //at 5pm, whichever comes first
-
-    var Number hour = now.getHour()
-    var Number luminance = KitchenMultisensor_SensorLuminance.state as Number;
-
-    if (((hour >= 14 && hour < 21) && luminance < 45) || hour == 17) {
-        //automationLock.lock()
-        try{
-            isUpdateAutomatic += 1;
-            if (isOKToTurnOnBecause.apply(KitchenCornerLight_Dimmer, REASON_TIME, lastStateReason, lastStateDate)) {
-                KitchenCornerLight_Dimmer.sendCommand(100);
-                lastStateReason.put(KitchenCornerLight_Dimmer.name, REASON_TIME);
-                lastStateDate.put(KitchenCornerLight_Dimmer.name, now);
-            }
-
-            if (isOKToTurnOnBecause.apply(KitchenSinkLights_Switch, REASON_TIME, lastStateReason, lastStateDate)) {
-                KitchenSinkLights_Switch.sendCommand(ON);
-                lastStateReason.put(KitchenSinkLights_Switch.name, REASON_TIME);
-                lastStateDate.put(KitchenSinkLights_Switch.name, now);
-            }
-
-            if (isOKToTurnOnBecause.apply(CounterLight_Dimmer, REASON_TIME, lastStateReason, lastStateDate)) {
-                CounterLight_Dimmer.sendCommand(100);
-                lastStateReason.put(CounterLight_Dimmer.name, REASON_TIME);
-                lastStateDate.put(CounterLight_Dimmer.name, now);
-            }
-
-            if (isOKToTurnOnBecause.apply(CoffeeLight_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-                CoffeeLight_Dimmer.sendCommand(50);
-                CoffeeLight_Temperature.sendCommand(50);
-                lastStateReason.put(CoffeeLight_Dimmer.name, REASON_TIME);
-                lastStateDate.put(CoffeeLight_Dimmer.name, now);
-            }
-
-            if (isOKToTurnOnBecause.apply(DiningroomLights_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-                DiningroomLights_Dimmer.sendCommand(50);
-                lastStateReason.put(DiningroomLights_Dimmer.name, REASON_TIME);
-                lastStateDate.put(DiningroomLights_Dimmer.name, now);
-            }
-
-            if (isOKToTurnOnBecause.apply(ChinaCabinet_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-                ChinaCabinet_Dimmer.sendCommand(100);
-                lastStateReason.put(ChinaCabinet_Dimmer.name, REASON_TIME);
-                lastStateDate.put(ChinaCabinet_Dimmer.name, now);
-            }
-        }
-        catch (Throwable t) {
-            logError("kitchen_evening", t.getMessage())
-        }
-        finally {
-            createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
-            //automationLock.unlock()
-        }
-    }
-end
-
-
-
-
-
-
 rule "Nighttime"
 when
     Time cron "0 30 22 ? * MON,TUE,WED,THU,SUN *" or
@@ -1087,6 +1172,10 @@ then
         vLivingroomScene.postUpdate(SCENE_DARK);
         lastStateReason.put(vLivingroomScene.name, REASON_GOODNIGHT);
         lastStateDate.put(vLivingroomScene.name, now); 
+
+        vKitchenScene.postUpdate(SCENE_DARK);
+        lastStateReason.put(vKitchenScene.name, REASON_GOODNIGHT);
+        lastStateDate.put(vKitchenScene.name, now); 
         
 
         Scene_NightLights.sendCommand(OFF);
