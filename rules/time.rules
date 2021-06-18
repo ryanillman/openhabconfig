@@ -8,8 +8,8 @@ var Number blindsUnderManualControl = 0
 
 rule "Ryan's Alarm On"
 when
-  Time cron "0 0 5 ? * MON-FRI" or
-  Time cron "1 0 5 ? * MON-FRI"
+  Time cron "0 30 5 ? * MON-FRI" or
+  Time cron "1 30 5 ? * MON-FRI"
 then
   logInfo("ryans-alarm.rule", "In Ryan's Alarm")
 
@@ -24,6 +24,8 @@ then
   }
 
   if (RyanPresent.state == ON) {
+    RyanScentsyWarmer_Dimmer.sendCommand(ON);
+    
     ryanAlarmTimer = createTimer(now, [ |
        if ((RyansLamp_Dimmer.state as Number) >= ryanAlarmTarget) {
          logInfo("ryans-alarm.rule", "Ryans alarm reached target, ending sequence");
@@ -43,7 +45,7 @@ end
 
 rule "Ryans Alarm Off"
 when
-  Time cron "0 30 7 ? * *" or
+  Time cron "0 45 6 ? * *" or
   Item RyanPresent changed to OFF
 then
   RyansLamp_Dimmer.sendCommand(OFF)
@@ -60,8 +62,73 @@ then
 end
 
 
+rule "Occasional Office Scentsy"
+when
+  Time cron "0 0 8,11,13,16 ? * *"
+then
+  if (RyanPresent.state == ON) {
+    RyanScentsyWarmer_Dimmer.sendCommand(ON);
+  }
+end
+
+rule "Occasional Livingroom Scentsy"
+when
+  Time cron "0 0 8,10,13,16,18,20 ? * *"
+then
+  LivingroomWaxWarmer_Dimmer.sendCommand(100);
+end
 
 
+rule "Set Ryan's working status"
+when 
+  Time cron "0 30 6 ? * MON-FRI "
+then
+  logDebug("ryan_work_light", "workin' time");
+  RyanWorking_Manual.postUpdate(ON);
+end
 
 
+rule "Clear Ryan's working status"
+when 
+  Time cron "0 0 18 ? * * "
+then
+  logDebug("ryan_work_light", "resetting flags");
+  RyanInMeeting_Manual.postUpdate(OFF);
+  RyanInMeeting_Cal.postUpdate(OFF);
+  
+  RyanWorking_Manual.postUpdate(OFF);
+  RyanWorking_Cal.postUpdate(OFF);
+  RyanWorking_Motion.postUpdate(OFF);
+end
+
+rule "turn off Ryan's work light"
+when
+  Time cron "0 0 22 ? * *"
+then
+  logDebug("ryan_work_light", "turning off because it's evening");
+  RgbwBulb8_Color.sendCommand(0);
+end
+
+
+rule "Ryan Working Status Light"
+when
+  Item RyanWorking changed or
+  Item RyanInMeeting changed
+then
+  logDebug("ryan_work_light", "something changed " + triggeringItemName);
+
+  if (ON == RyanInMeeting.state) {
+    logDebug("ryan_work_light", "in a meeting");
+    RgbwBulb8_Color.sendCommand(new HSBType(new DecimalType(0), new PercentType(100), new PercentType(50)));
+  }
+  else if (ON == RyanWorking.state) {
+    logDebug("ryan_work_light", "working");
+    RgbwBulb8_Color.sendCommand(new HSBType(new DecimalType(50), new PercentType(100), new PercentType(50)));
+  }
+  else {
+    logDebug("ryan_work_light", "not working");
+    RgbwBulb8_ColorTemperature.sendCommand(50)
+    RgbwBulb8_Color.sendCommand(50);
+  }
+end
 

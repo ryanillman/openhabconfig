@@ -1,6 +1,6 @@
 import java.util.HashMap
 import java.util.concurrent.locks.ReentrantLock
-import org.eclipse.smarthome.model.script.ScriptServiceUtil
+import org.openhab.core.model.script.ScriptServiceUtil
 
 
 //constants
@@ -16,6 +16,7 @@ val String REASON_GOODNIGHT     = "goodnight"
 
 val String SCENE_MORNING   = "morning"
 val String SCENE_NORMAL    = "normal"
+val String SCENE_HALFNORMAL= "halfnormal"
 val String SCENE_TV        = "tv"
 val String SCENE_MOVIE     = "movie"
 val String SCENE_COZY      = "cozy"
@@ -33,88 +34,141 @@ val String MOOD_CHIPPER        = "chipper"
 val String MOOD_FESTIVE_XMAS   = "xmas"
 val String MOOD_FESTIVE_STP    = "stpatricks"
 val String MOOD_FESTIVE_JULY4  = "july4"
+val String MOOD_FESTIVE_EASTER = "easter"
+val String MOOD_FESTIVE_HALOWN = "halloween"
 
 val HashMap<String, String>   lastStateReason = newHashMap()
-val HashMap<String, DateTime> lastStateDate   = newHashMap()
+val HashMap<String, ZonedDateTime> lastStateDate   = newHashMap()
 val HashMap<String, Timer>    autoOffTimers   = newHashMap()
 
-val ReentrantLock automationLock = null //new ReentrantLock()
+//val ReentrantLock automationLock = null //new ReentrantLock()
 
 
-val org.eclipse.xtext.xbase.lib.Functions$Function4 <GenericItem, String, HashMap<String, String>, HashMap<String, DateTime>, Boolean> isOKToTurnOnBecause = [ 
-    GenericItem item, String reason, HashMap<String, String> itemReason, HashMap<String, DateTime> itemTime | 
+val isOKToTurnOnBecause = [ GenericItem item, String reason, HashMap<String, String> itemReason, HashMap<String, ZonedDateTime> itemTime | 
 
     var String oldReason = itemReason.get(item.name);
-    if (oldReason === null) { oldReason = "other"; }
+    if (null === oldReason) { oldReason = ""; }
 
     var currentState = item.state;
     
     //90 minutes seems like a good wait time for manual overrides. we'll see how it goes
     //this will probably come from group membership or something
-    var DateTime oldTime = itemTime.get(item.name);
-    if (oldTime === null) { oldTime = now; }
-    val boolean manualTimeExpired  = now.minusMinutes(90).isAfter(oldTime);
+    var ZonedDateTime oldTime;
+    try {
+        oldTime = itemTime.get(item.name);
+        if (null === oldTime) { oldTime = now; }
+    } catch (Throwable t) {
+        logWarn("isOKToTurnOn", "Failed getting a time:" + t.getMessage())
+        oldTime = now.minusMinutes(100)
+    }
+
+    var boolean manualTimeExpired = true;
+    var boolean goodnightTimeExpired = true;
+
+    try{
+        manualTimeExpired    = now.minusMinutes(90).isAfter(oldTime);
+        goodnightTimeExpired = now.getDayOfMonth() != oldTime.getDayOfMonth(); 
+    }
+    catch (Throwable t) {
+        logWarn("isOKToTurnOn", "Failed doing time comparisons:" + t.getMessage())
+        manualTimeExpired = true
+        goodnightTimeExpired = true
+    }
 
     var boolean retval = true;
 
-    
+
     if (reason != "health_safety" && oldReason == "health_safety") {
+        logDebug("isOkToTurnOnBecause", item.name + "update denied because it's not health_safety");
         retval = false;
     }
     else if (oldReason == "manual" && ! manualTimeExpired) {
+        logDebug("isOkToTurnOnBecause", item.name + "update denied because current state was set manually");
         retval = false;
     }
     //don't "downgrade" a reason for something to already be on
-    else if ( (currentState != OFF ) &&
-        (reason == "weather" && currentState == ON && (oldReason == "time")) ||
-        (reason == "other"   && currentState == ON && (oldReason == "time" || oldReason == "weather")) ||
-        (reason == "timer"   && currentState == ON && (oldReason == "time" || oldReason == "weather" || oldReason == "other")) ||
-        (reason == "motion"  && currentState == ON && (oldReason == "time" || oldReason == "weather" || oldReason == "other" || oldReason == "timer"))
-        )
+    else if ( (currentState != OFF && currentState != 0) && (
+        (reason == "weather" && (oldReason == "time")) ||
+        (reason == "other"   && (oldReason == "time" || oldReason == "weather")) ||
+        (reason == "timer"   && (oldReason == "time" || oldReason == "weather" || oldReason == "other")) ||
+        (reason == "motion"  && (oldReason == "time" || oldReason == "weather" || oldReason == "other" || oldReason == "timer"))
+        ))
     {
+        logDebug("isOkToTurnOnBecause", item.name + "update denied because it's a downgrade of current reason: " + oldReason + " to " + reason);
         retval = false;
     }
-    //weather and timers can't overrrule goodnight (but time, motion and other can)
-    else if (("weather" == reason || "timer" == reason) && oldReason =="goodnight") {
+    else if ("timer" == reason && oldReason =="goodnight") {
+        logDebug("isOkToTurnOnBecause", item.name + "update denied because timers can't overrule goodnight");
         retval = false;
+    }
+    //time can only overrule goodnight if we've crossed midnight
+    else if ("time" == reason && "goodnight" == oldReason && ! goodnightTimeExpired) {
+        logDebug("isOkToTurnOnBecause",  item.name + "update denied because time can't overrule goodnight on the same day");
+        retval = false;
+    }
+
+    if (retval == true) {
+        //logDebug("isOkToTurnOnBecause", item.name + "allowing update");
     }
 
     retval
 ]
 
-val org.eclipse.xtext.xbase.lib.Functions$Function4<GenericItem, String, HashMap<String, String>, HashMap<String, DateTime>, Boolean> isOKToTurnOffBecause = [ 
-    GenericItem item, String reason, HashMap<String, String> itemReason, HashMap<String, DateTime> itemTime | 
+val isOKToTurnOffBecause = [ GenericItem item, String reason, HashMap<String, String> itemReason, HashMap<String, ZonedDateTime> itemTime | 
 
     var String oldReason = itemReason.get(item.name);
-    if (oldReason === null) { oldReason = "other"; }
+    if (null == oldReason) { oldReason = ""; }
 
-    var State currentState = item.state;
+    var currentState = item.state;
     
     //90 minutes seems like a good wait time for manual overrides. we'll see how it goes
     //this will probably come from group membership or something
-    var DateTime oldTime = itemTime.get(item.name);
-    if (oldTime === null) { oldTime = now; }
-    val boolean manualTimeExpired  = now.minusMinutes(90).isAfter(oldTime);
+    var ZonedDateTime oldTime
+    try {
+        oldTime = itemTime.get(item.name);
+        if (null == oldTime) { oldTime = now; }
+    } catch (Throwable t) {
+        logWarn("isOKToTurnOFF", "Failed getting a time:" + t.getMessage())
+        oldTime = now.minusMinutes(100);
+    }
+
+    var boolean manualTimeExpired = true
+    var boolean goodnightTimeExpired = true
+
+    try{
+        manualTimeExpired    = now.minusMinutes(90).isAfter(oldTime);
+        goodnightTimeExpired = now.getDayOfMonth() != oldTime.getDayOfMonth(); 
+    }
+    catch (Throwable t) {
+        logWarn("isOKToTurnOFF", "Failed doing time comparisons:" + t.getMessage())
+        manualTimeExpired = true
+        goodnightTimeExpired = true
+    }
 
     var boolean retval = true;
 
     if (reason != "health_safety" && oldReason == "health_safety") {
+        logDebug("isOkToTurnOffBecause", item.name + "update denied because it's not health_safety");
         retval = false;
     }
     else if (reason=="goodnight"){
+        logDebug("isOkToTurnOffBecause", item.name + "update APPROVED because goodnight");
         retval = true; //goodnight is a wierd quaisi manual reason that can override basically anything
     }
     //timers can overide manual (otherwise auto-off timers wouldn't work)
     else if (oldReason == "manual" && ! manualTimeExpired && "timer" != reason) {
+        logWarn("isOkToTurnOffBecause", item.name + "update denied because state was set manually and manual time has not expired");
         retval = false;
     }
-    else if (
+    //don't downgrade a reason for something to be off
+    else if (!(currentState != OFF && currentState != 0) && (
         (reason == "weather" && (oldReason == "time")) ||
         (reason == "other" &&   (oldReason == "time" || oldReason == "weather")) ||
         (reason == "timer" &&   (oldReason == "time" || oldReason == "weather" || oldReason == "other")) ||
         (reason == "motion" &&  (oldReason == "time" || oldReason == "weather" || oldReason == "other" || oldReason == "timer"))
-        )
+    ))
     {
+        logDebug("isOkToTurnOffBecause", item.name + "update denied because it's a downgrade of current reason: " + oldReason + " to " + reason);
         retval = false;
     }
 
@@ -126,9 +180,7 @@ val org.eclipse.xtext.xbase.lib.Functions$Function4<GenericItem, String, HashMap
 //that an ongoing automatic operation is running, 
 //to distinguish from an update caused by a person
 //pushing a button/switch or giving Alexa a command
-var Number isUpdateAutomatic = 0
-
-
+var int isUpdateAutomatic = 0
 
 
 
@@ -140,83 +192,128 @@ rule "gTrackStateReason item changed so track manual state"
 when
     Member of gTrackStateReason received command
 then
-    //this rule is all about tracking manual state changes
-    //whoever is automatically changing state will be doing
-    //this housekeeping
-    var DateTime oldTime = lastStateDate.get(triggeringItem.name);
+    var boolean appearsToBeManual = false;
     var String oldReason = lastStateReason.get(triggeringItem.name);
-    if (oldTime === null) { oldTime = now.minusMinutes(99); }
-    val boolean isRecentChange  = now.minusSeconds(2).isBefore(oldTime);
 
-    val boolean appearsToBeManual = isUpdateAutomatic != 1 && ! isRecentChange;
+    if (lastStateDate.get(triggeringItem.name) != null) {
+        lastStateDate.put(triggeringItem.name, now);
+    }
+
+    if (isUpdateAutomatic < 0) {
+        isUpdateAutomatic = 0;
+    }
+
+    if (isUpdateAutomatic > 2) {
+        //the odds of more than 2 rules running at the same time legitimately is small
+        //it's more likely that we're leaking flags somewhere.
+        isUpdateAutomatic = 0;
+    }
+
+    appearsToBeManual = isUpdateAutomatic == 0;
 
     if (appearsToBeManual && REASON_HEALTH_SAFETY == oldReason){
         //request denied
         logError("gTrackStateReason", "UNABLE TO COMPLY - HEALTH & SAFETY-SET ITEMS CANNOT BE OVERRIDEN MANUALLY");
-        isUpdateAutomatic = 1;
+        isUpdateAutomatic += 1;
 
         triggeringItem.sendCommand(if(receivedCommand == OFF) {ON} else {OFF});
 
-        Thread.sleep(300);
-
-        isUpdateAutomatic = 0;
+        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
     }
     else if (appearsToBeManual) {
+        //logInfo("gTrackStateReason", "setting item " + triggeringItem.name + " to REASON_MANUAL; isUpdateAutomatic: " + isUpdateAutomatic);
         lastStateReason.put(triggeringItem.name, REASON_MANUAL);
         lastStateDate.put(triggeringItem.name, now);
     }
+    else {
+        //logInfo("gTrackStateReason", triggeringItem.name + " automatic change as of " + lastStateDate.get(triggeringItem.name).toString());
+    } // */
 
-    var String reasonList 
-    
-    try {
-        reasonList = gTrackStateReason.members.sortBy[ name ].map[ i|
-            if (i === null) { return ""; }
-            var lastState = if (lastStateReason.get(i.name) !== null) { lastStateReason.get(i.name) } else { "UNKNOWN"; }
-            return String::format("%40s", i.name) + " => "+ lastState
-        ].reduce[ list, i | return if (i !== null) {list + "\n" + i} else if (list !== null) {list} else {""}];
-    }
-    catch (Throwable t) {
-        reasonList = "shit blew up coming up with the list"
-        //logError("gTrackStateReason", "Failed to generate reason list: " + t.getMessage());
-    }
+    createTimer(now.plusSeconds(3), [ | 
+        var String reasonList; 
+        
+        try {
+            reasonList = gTrackStateReason.members.sortBy[ name ].map[ i |
+                if (i === null) { return ""; }
+                var lastReason = if (lastStateReason.get(i.name) !== null) { lastStateReason.get(i.name) } else { "UNKNOWN"; }
+                var lastDate = if(lastStateDate.get(i.name) !== null) { lastStateDate.get(i.name); } else { "NEVER"; }
+                return String::format("%40s", i.name) + "( "+i.state.toString()+" ) => " + lastReason + " at " + lastDate ;
+            ].reduce[ list, i | return if (i !== null) {list + "\n" + i} else if (list !== null) {list} else {""}];
 
-    vItemReasonList.postUpdate(reasonList)
+            reasonList += "\nisUpdateAutomatic = " + isUpdateAutomatic + "\n";
+        }
+        catch (Throwable t) {
+            reasonList = "shit blew up coming up with the list"
+            //logError("gTrackStateReason", "Failed to generate reason list: " + t.getMessage());
+        }
+
+        vItemReasonList.postUpdate(reasonList)
+    ])
 end
 
-
-rule "AutoOff_60 items auto off after 60 minutes unless messed with"
+rule "AutoOff items auto off after XX minutes unless messed with"
 when
-    Member of gAutoOff_60 received command ON
+    //Member of gAutoOff received command ON or
+    //Member of gAutoOff_5 received command ON or
+    //Member of gAutoOff_30 received command ON or
+    //Member of gAutoOff_60 received command ON or
+    Member of gAutoOff changed from OFF or
+    Member of gAutoOff_5 changed from OFF or
+    Member of gAutoOff_30 changed from OFF or
+    Member of gAutoOff_60 changed from OFF or
+    Member of gAutoOff changed from 0 or
+    Member of gAutoOff_5 changed from 0 or
+    Member of gAutoOff_30 changed from 0 or
+    Member of gAutoOff_60 changed from 0
 then
     //val item = gAutoOff.allMembers.findFirst[] as GenericItem
-    var item = triggeringItem
+    var item = triggeringItem;
+    var delay = 999;
     var existingTimer = autoOffTimers.get(triggeringItem.name);
 
     if (existingTimer !== null && ! existingTimer.hasTerminated) {
         existingTimer.cancel();
     }
 
-    autoOffTimers.put(triggeringItem.name, createTimer(now.plusMinutes(60), [ |
+    triggeringItem.getGroupNames.forEach([ g | 
+        var underscore = g.indexOf("_");
+        if (-1 != underscore) {
+            var gdelay = Integer.parseInt(g.substring(underscore + 1));
+            if (gdelay < delay) {
+                delay = gdelay;
+            }
+        }
+    ])
+
+    if (delay == 999) {delay = 1;} //999 is a flag for 'not found'
+
+    logInfo("autooff_*", "Auto-off item turned on: " + item.name + " setting delay: " + delay); 
+
+    
+
+    autoOffTimers.put(triggeringItem.name, createTimer(now.plusMinutes(delay), [ |
         //automationLock.lock()
         try {
-            isUpdateAutomatic = 1
+            isUpdateAutomatic += 1;
+
+            logInfo("autooff_*", "Auto-off  item timer expired: " + item.name);
 
             item.sendCommand(OFF);
             lastStateReason.put(item.name, REASON_TIMER);
-            lastStateDate.put(item.name, now.toString());
-
-            Thread.sleep(200); //guess to let things get caught up
+            lastStateDate.put(item.name, now);
         }
         catch (Throwable t) {
-            logError("gAutoOff_60", t.getMessage())
+            logError("gAutoOff_*", "Failed to turn off: " + t.getMessage())
         }
         finally {
-            isUpdateAutomatic = 0;
+            createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
             //automationLock.unlock()
         }
 
     ]))
 end
+
+
 
 rule "Luminance and Sun control vIsLightOut"
 when
@@ -225,6 +322,7 @@ when
 then
     var Number luminance
     var Number elevation
+    var Number time = (now.getHour() * 100) + now.getMinute()
     
     try {
         luminance = (FrontPorchMultisensor_SensorLuminance.state as Number).intValue
@@ -242,10 +340,10 @@ then
         logWarn("vIsLightOut", "failed to compute elevation from " + LocalSun_Position_Elevation.state)
     }
 
-    if ((luminance < 10 || elevation < 3) && vIsLightOut.state == ON) {
+    if ((luminance < 10 || elevation < 1) && vIsLightOut.state == ON) {
         vIsLightOut.postUpdate(OFF)
     }
-    else if ((luminance > 20 && elevation > 10) && vIsLightOut.state == OFF) {
+    else if ((luminance > 20 && elevation > 1) && vIsLightOut.state == OFF && (time >= 730)) {
         vIsLightOut.postUpdate(ON)
     }
 end
@@ -259,17 +357,19 @@ end
 rule "Morning Lights on weekday & weekend"
 when
   Time cron "0 0 6 ? * MON-FRI" or
-  Time cron "0 30 7 ? * SAT,SUN"
+  Time cron "0 30 7 ? * SAT,SUN" 
 then
     //automationLock.lock();
     try{
-        isUpdateAutomatic = 1;
+        isUpdateAutomatic += 1;
 
         //this is the dailiy reset of the "Scene"
         vLivingroomScene.postUpdate(SCENE_MORNING);
+        lastStateReason.put(vLivingroomScene.name, REASON_TIME);
+        lastStateDate.put(vLivingroomScene.name, now);
 
 
-        if (now.getDayOfWeek < 6) {         
+        if (now.getDayOfWeek().getValue() < 6 && RyanPresent.state == ON) {         
             RyansDeskLamp_Dimmer.sendCommand(40);
             lastStateReason.put(RyansDeskLamp_Dimmer.name, REASON_TIME);
             lastStateDate.put(RyansDeskLamp_Dimmer.name, now);
@@ -278,21 +378,24 @@ then
             RyansOtherDeskLamp_Dimmer.sendCommand(100);
             lastStateReason.put(RyansOtherDeskLamp_Dimmer.name, REASON_TIME);
             lastStateDate.put(RyansOtherDeskLamp_Dimmer.name, now);   
+
+            RgbwBulb8_ColorTemperature.sendCommand(50)
+            RgbwBulb8_Color.sendCommand(100);
+            lastStateReason.put(RgbwBulb8_Color.name, REASON_TIME);
+            lastStateDate.put(RgbwBulb8_Color.name, now);   
         }
 
-        CoffeeLight_Switch.sendCommand(ON);
-        lastStateReason.put(CoffeeLight_Switch.name, REASON_TIME);
-        lastStateDate.put(CoffeeLight_Switch.name, now);
+        CoffeeLight_Dimmer.sendCommand(100);
+        lastStateReason.put(CoffeeLight_Dimmer.name, REASON_TIME);
+        lastStateDate.put(CoffeeLight_Dimmer.name, now);
 
-               
-        Thread.sleep(200); //let everything catch up before turning off automatic updates
+        CoffeeLight_Temperature2.sendCommand(100);
     }
     catch (Throwable t) {
         logError("morning_lights", t.getMessage())
     }
     finally {
-        Scene_MorningLights.postUpdate(OFF);
-        isUpdateAutomatic = 0;
+        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
         //automationLock.unlock()
     }
 end
@@ -306,27 +409,31 @@ when
 then
     //automationLock.lock()
     try {
-        isUpdateAutomatic = 1;
+        isUpdateAutomatic += 1;
 
-        if (isOKToTurnOffBecause.apply(CoffeeLight_Switch, REASON_TIME, lastStateReason, lastStateDate)){
-            CoffeeLight_Switch.sendCommand(OFF);
-            lastStateReason.put(CoffeeLight_Switch.name, REASON_TIME);
-            lastStateDate.put(CoffeeLight_Switch.name, now);
+        if (isOKToTurnOffBecause.apply(CoffeeLight_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
+            CoffeeLight_Dimmer.sendCommand(0);
+            lastStateReason.put(CoffeeLight_Dimmer.name, REASON_TIME);
+            lastStateDate.put(CoffeeLight_Dimmer.name, now);
+        }
+
+        if (isOKToTurnOnBecause.apply(CoffeeLight_Color, REASON_TIME, lastStateReason, lastStateDate)){
+            CoffeeLight_Color.sendCommand(new HSBType(new DecimalType(290), new PercentType(50), new PercentType(90)););
+            lastStateReason.put(CoffeeLight_Color.name, REASON_TIME);
+            lastStateDate.put(CoffeeLight_Color.name, now);
         }
 
         if (isOKToTurnOnBecause.apply(BarLights_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
-            BarLights_Dimmer.sendCommand(100);
+            BarLights_Dimmer.sendCommand(ON);
             lastStateReason.put(BarLights_Dimmer.name, REASON_TIME);
             lastStateDate.put(BarLights_Dimmer.name, now);
         }
-
-        Thread.sleep(200); //let everything catch up before turning off automatic updates
     }
     catch (Throwable t) {
         logError("DrinkingTime", t.getMessage())
     }
     finally {
-        isUpdateAutomatic = 0;
+        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
         //automationLock.unlock()
     }
 end
@@ -336,20 +443,25 @@ when
     System started or
     Time cron "0 */10 * ? * *"
 then
-    var String currentMood = vLivingroomMood.state;
-    var Number hour = now.getHourOfDay();
-    var boolean isWorkNight = now.getDayOfWeek != 5 && now.getDayOfWeek != 6;
+    var String currentMood = vLivingroomMood.state.toString();
+    var Number hour = now.getHour();
+    var Number month = now.getMonthValue();
+    var Number day = now.getDayOfMonth();
+    var boolean isWorkNight = now.getDayOfWeek() != 5 && now.getDayOfWeek() != 6;
     var String newMood = null;
 
 
-    if (now.getMonthOfYear == 12 && now.getDayOfMonth==25) {
+    if (month == 12 && day == 25) {
         newMood = MOOD_FESTIVE_XMAS;
     }
-    else if (now.getMonthOfYear == 3 && now.getDayOfMonth==17) {
+    else if (month  == 3 && day == 17) {
         newMood = MOOD_FESTIVE_STP;
     }
-    else if (now.getMonthOfYear == 7 && now.getDayOfMonth==4) {
+    else if (month == 7 && day == 4) {
         newMood = MOOD_FESTIVE_JULY4;
+    }
+    else if (month == 10 && day == 31){
+        newMood = MOOD_FESTIVE_HALOWN;
     }
     else if (hour == 4) {
         newMood = MOOD_MORNING;
@@ -371,45 +483,42 @@ then
     } 
 
 
-    if (newMood !== null) {
+    if (null !== newMood ) {
         try{
-            isUpdateAutomatic = 1;
+            isUpdateAutomatic += 1;
+            createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
 
             if (isOKToTurnOnBecause.apply(vLivingroomMood, REASON_TIME, lastStateReason, lastStateDate)){
-                logInfo("mood_manager", "new mood applied " + newMood);
+                logDebug("mood_manager", "new mood applied " + newMood);
                 vLivingroomMood.postUpdate(newMood);
-                lastStateReason.put(BarLights_Dimmer.name, REASON_TIME);
-                lastStateDate.put(BarLights_Dimmer.name, now);
+                lastStateReason.put(vLivingroomMood.name, REASON_TIME);
+                lastStateDate.put(vLivingroomMood.name, now);
             }
             else {
-                logInfo("mood_manager", "mood change BLOCKED! would have done " + newMood + "but "+currentMood + " was set manually");
+                //logError("mood_manager", "mood change BLOCKED! would have done " + newMood + "but "+currentMood + " was set manually");
             }
-
-            Thread.sleep(200); //let everything catch up before turning off automatic updates
         }
         catch (Throwable t) {
             logError("mood_manager", t.getMessage())
         }
         finally {
-            isUpdateAutomatic = 0;
+            createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
         }
     }
 end
 
 rule "Livingroom auto scene transitions"
-when 
+when
+    Time cron "0 0 9 ? * * " or
     Time cron "0 0 17 ? * * " or
     Time cron "0 0 21 ? * * " or
     Item LivingRoomMultisensor_SensorLuminance changed
-then
-    //the lights should come up to 'evening' level if the luminace gets below 30, or 
-    //at 5pm, whichever comes first. but don't turn on after 9pm  for luminance
-    
+then    
     var Number hour = null;
     var Number luminance = null;
 
     try {
-        hour = now.getHourOfDay();
+        hour = now.getHour();
         if (null !== LivingRoomMultisensor_SensorLuminance.state){
             luminance = LivingRoomMultisensor_SensorLuminance.state as Number;
         }
@@ -418,44 +527,58 @@ then
         }
     }
     catch(Throwable ex) {
-        if (null === luminace) {luminance = 50;}
+        if (null === luminance) {luminance = 50;}
     }
 
-    if ((hour >= 17 && hour <= 18) || (luminance < 40 && hour > 13 && hour < 20)) {
+    isUpdateAutomatic += 1;
+    createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
+
+    if (luminance < 40 && hour > 9 && hour < 12) {
+        if (isOKToTurnOnBecause.apply(vLivingroomScene, REASON_TIME, lastStateReason, lastStateDate)){
+            vLivingroomScene.postUpdate(SCENE_HALFNORMAL);
+            lastStateReason.put(vLivingroomScene.name, REASON_TIME);
+            lastStateDate.put(vLivingroomScene.name, now);
+        }
+    }
+    else if (((hour >= 17 && hour <= 18) || (luminance < 40 && hour > 13 && hour < 21)) && vLivingroomScene.state !== SCENE_TV && vLivingroomScene.state !== SCENE_MOVIE) {
         if (isOKToTurnOnBecause.apply(vLivingroomScene, REASON_TIME, lastStateReason, lastStateDate)){
             vLivingroomScene.postUpdate(SCENE_NORMAL);
             lastStateReason.put(vLivingroomScene.name, REASON_TIME);
             lastStateDate.put(vLivingroomScene.name, now);
         }
     }
-    else if (hour >= 20) {
+    else if (hour >= 21 && vLivingroomScene.state !== SCENE_DARK) {
         if (isOKToTurnOnBecause.apply(vLivingroomScene, REASON_TIME, lastStateReason, lastStateDate)){
             vLivingroomScene.postUpdate(SCENE_COZY);
             lastStateReason.put(vLivingroomScene.name, REASON_TIME);
             lastStateDate.put(vLivingroomScene.name, now);
         }
-    }
+    }   
 end
+
+
 
 rule "Livingroom set Scene"
 when
   System started or
-  Item vLivingroomScene changed
+  Item vLivingroomScene changed or
+  Time cron "0 */15 * ? * * "
 then
   var sofa_level  = 100;
-  var floor_level = 100;  
+  var floor1_level = 100;  
+  var floor2_level = 100;  
   var mantle_level = ON;
-  var couch_level = 100;
   var couch1_level = 100;
   var couch2_level = 100;
   var couch3_level = 100;
   var curio_level = 100;
+  var xmas_level = 100;
 
-  var reason;
+  var String reason;
 
-  if (null !== lastStateReason.get(vLivingroomScene.name)) {
+  if (null !== lastStateReason.get(vLivingroomScene.name) && REASON_MANUAL !== lastStateReason.get(vLivingroomScene.name)) {
       reason = lastStateReason.get(vLivingroomScene.name);
-      logInfo("scenes", "found vLivingroomScene reason " + reason + ", stealing it");
+      logDebug("scenes", "found vLivingroomScene reason " + reason + ", stealing it");
   }
   else {
       reason = REASON_TIME;
@@ -468,87 +591,88 @@ then
     switch vLivingroomScene.state {
         case SCENE_NORMAL: {
             sofa_level  = 100;
-            floor_level = 100;
+            floor1_level = 100;
+            floor2_level = 100;
             mantle_level = ON;
             curio_level = 100;
         }
+        case SCENE_HALFNORMAL: {
+            sofa_level  = 60;
+            floor1_level = 60;
+            floor2_level = 60;
+            mantle_level = OFF;
+            couch1_level = 60;
+            couch2_level = 60;
+            couch3_level = 60;
+            curio_level = 60;
+        }
         case SCENE_MORNING: {
             sofa_level  = 30;
-            floor_level = 30;
+            floor1_level = 30;
+            floor2_level = 30
             mantle_level = OFF;
-            couch_level = 35;
             couch1_level = 35;
             couch2_level = 35;
             couch3_level = 35;
             curio_level = 35;
         } 
         case SCENE_TV: {
-            sofa_level  = 18;
-            floor_level = 0;
+            sofa_level  = 0;
+            floor1_level = 5;
+            floor2_level = 5;
             mantle_level = OFF;
-            couch_level = 15;
             couch1_level = 5;
             couch2_level = 5;
             couch3_level = 5;
             curio_level = 15;
         }
         case SCENE_MOVIE: {
-            sofa_level  = 12;
-            floor_level = 0;
+            sofa_level  = 0;
+            floor1_level = 5;
+            floor2_level = 0;
             mantle_level = OFF;
-            couch_level = 0;
             couch1_level = 0;
             couch2_level = 0;
-            couch3_level = 0;
-            curio_level = 0;
+            couch3_level = 5;
+            curio_level = 5;
         }
         case SCENE_COZY: {
             sofa_level  = 20;
-            floor_level = 20;
+            floor1_level = 35;
+            floor2_level = 35;
             mantle_level = OFF;
-            couch_level = 15;
-            couch1_level = 15;
-            couch2_level = 15;
-            couch3_level = 15;
+            couch1_level = 35;
+            couch2_level = 35;
+            couch3_level = 35;
             curio_level = 5;
         }
         case SCENE_DARK: {
             sofa_level  = 0;
-            floor_level = 0;
-            mantle_level= OFF;
-            couch_level = 0;
+            floor1_level = 0;
+            floor2_level = 0;
+            mantle_level = OFF;
             couch1_level = 0;
             couch2_level = 0;
             couch3_level = 0;
             curio_level = 0;
+            xmas_level = 0;
         }  
     }
 
-    logInfo("scenes", "setting scene " + vLivingroomScene.state);
-    logDebug("scenes", "getting lock...");
+    logDebug("scenes", "setting scene " + vLivingroomScene.state);
     //automationLock.lock()
-    logDebug("scenes", "got it");
     try{
-        isUpdateAutomatic = 1;
-
-        if (isOKToTurnOnBecause.apply(SofaTableLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
-            SofaTableLamps_Dimmer.sendCommand(sofa_level);
-            lastStateReason.put(SofaTableLamps_Dimmer.name, reason);
-            lastStateDate.put(SofaTableLamps_Dimmer.name, now);
-        }
+        isUpdateAutomatic += 1;
 
 
-        if (isOKToTurnOnBecause.apply(FloorLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
-            FloorLamps_Dimmer.sendCommand(floor_level);
-            lastStateReason.put(FloorLamps_Dimmer.name, reason);
-            lastStateDate.put(FloorLamps_Dimmer.name, now);
-        }
+        RgbwBulb6_Color.sendCommand(sofa_level);
+        RgbwBulb7_Color.sendCommand(sofa_level);
+        RgbwBulb5_Color.sendCommand(floor1_level);
+        RgbwBulb1_Color.sendCommand(floor2_level);
+        RgbwBulb2_Color.sendCommand(couch1_level);
+        RgbwBulb3_Color.sendCommand(couch2_level);
+        RgbwBulb4_Color.sendCommand(couch3_level);
 
-        if (isOKToTurnOnBecause.apply(RgbwBulb1_Color, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
-            RgbwBulb1_Color.sendCommand(floor_level);
-            lastStateReason.put(RgbwBulb1_Color.name, reason);
-            lastStateDate.put(RgbwBulb1_Color.name, now);
-        }
 
         if (isOKToTurnOnBecause.apply(MantleLight_Switch, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
             MantleLight_Switch.sendCommand(mantle_level);
@@ -556,35 +680,16 @@ then
             lastStateDate.put(MantleLight_Switch.name, now);
         }
 
-        if (isOKToTurnOnBecause.apply(CouchLamps_Dimmer, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
-            CouchLamps_Dimmer.sendCommand(couch_level);
-            lastStateReason.put(CouchLamps_Dimmer.name, reason);
-            lastStateDate.put(CouchLamps_Dimmer.name, now);
-        }
-
-        if (isOKToTurnOnBecause.apply(RgbwBulb2_Color, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
-            
-            RgbwBulb2_Color.sendCommand(couch1_level);
-            lastStateReason.put(RgbwBulb2_Color.name, reason);
-            lastStateDate.put(RgbwBulb2_Color.name, now);
-        }
-
-        if (isOKToTurnOnBecause.apply(RgbwBulb3_Color, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
-            RgbwBulb3_Color.sendCommand(couch2_level);
-            lastStateReason.put(RgbwBulb3_Color.name, reason);
-            lastStateDate.put(RgbwBulb3_Color.name, now);
-        }
-
-        if (isOKToTurnOnBecause.apply(RgbwBulb4_Color, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
-            RgbwBulb4_Color.sendCommand(couch3_level);
-            lastStateReason.put(RgbwBulb4_Color.name, reason);
-            lastStateDate.put(RgbwBulb4_Color.name, now);
-        }
-
         if (isOKToTurnOnBecause.apply(CurioCabinet_Dimmer, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
             CurioCabinet_Dimmer.sendCommand(curio_level);
             lastStateReason.put(CurioCabinet_Dimmer.name, reason);
             lastStateDate.put(CurioCabinet_Dimmer.name, now);
+        }
+
+        if (isOKToTurnOnBecause.apply(Xmas_Tree, reason, lastStateReason, lastStateDate) || changeIsBySceneChange){
+            Xmas_Tree.sendCommand(xmas_level);
+            lastStateReason.put(Xmas_Tree.name, reason);
+            lastStateDate.put(Xmas_Tree.name, now);
         }
 
 
@@ -594,29 +699,31 @@ then
             //in view and can be annoying while watching TV
             //since they don't participate in the scene, we'll set their status to manual
             //so they don't come back up on their own for a while.
-            logInfo("scenes", "Movie time is triggering, checking diningroom light state: "  + (DiningroomLights_Dimmer.state as Number).toString);
+            logDebug("scenes", "Movie time is triggering, checking diningroom light state: "  + (DiningroomLights_Dimmer.state as Number).toString);
 
             if (DiningroomLights_Dimmer.state as Number > 20) {
-                logInfo("scenes", "Diningroom Lights were over 20")
-                DiningroomLights_Dimmer.sendCommand(15);
+                logDebug("scenes", "Diningroom Lights were over 20")
+                DiningroomLights_Dimmer.sendCommand(10);
                 lastStateReason.put(DiningroomLights_Dimmer.name, REASON_MANUAL);
                 lastStateDate.put(DiningroomLights_Dimmer.name, now);
             }
 
             if (BarLights_Dimmer.state as Number > 10) {
-                BarLights_Dimmer.sendCommand(25);
+                BarLights_Dimmer.sendCommand(10);
                 lastStateReason.put(BarLights_Dimmer.name, REASON_MANUAL);
                 lastStateDate.put(BarLights_Dimmer.name, now);
             }
-        } 
 
-        Thread.sleep(200); //let everything catch up before turning off automatic updates
+            if (LivingroomWaxWarmer_Dimmer.state as Number > 50) {
+                LivingroomWaxWarmer_Dimmer.sendCommand(50);
+            }
+        } 
     }
     catch (Throwable t) {
         logError("scenes", "failed to complete setting up scene: " + t.getMessage())
     }
     finally {
-        isUpdateAutomatic = 0;
+        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
         //automationLock.unlock();
     }
   
@@ -626,130 +733,261 @@ end
 rule "Livingroom Set Mood"
 when
     System started or
-    Item vLivingroomMood changed
+    Item vLivingroomMood changed or
+    Time cron "0 */15 * ? * * "
 then
-    logInfo("mood_applier", "mood changed " + vLivingroomMood.state);
+    if (null === vLivingroomMood.state) {
+        logError("mood_applier", "vLivingroomMood.state was null");
+        return;
+    }
+
+    var String reason;
+
+    if (null !== lastStateReason.get(vLivingroomMood.name) && REASON_MANUAL !== lastStateReason.get(vLivingroomScene.name)) {
+        reason = lastStateReason.get(vLivingroomMood.name);
+        logDebug("scenes", "found vLivingroomScene reason " + reason + ", stealing it");
+    }
+    else {
+        reason = REASON_TIME;
+        logError("scenes", "failed to find vLivingroomScene reason, going with time 'cause why not");
+    }
+
+    logDebug("mood_applier", "mood changed " + vLivingroomMood.state);
     //could do this in an array, but it will eventually be a random list
     //of bulb ids; we're not doing them all just hte ones that are in the living room
     //100 = candellight, 0 = 6000k/daylight
-    var bulb1_check  = RgbwBulb1_Color;
     var bulb1_device = RgbwBulb1_ColorTemperature;
     var bulb1_value  = 65;
 
-    var bulb2_check  = RgbwBulb2_Color;
     var bulb2_device = RgbwBulb2_ColorTemperature;
     var bulb2_value  = 65;
 
-    var bulb3_check  = RgbwBulb3_Color;
     var bulb3_device = RgbwBulb3_ColorTemperature;
     var bulb3_value  = 65;
 
-    var bulb4_check  = RgbwBulb4_Color;
     var bulb4_device = RgbwBulb4_ColorTemperature;
     var bulb4_value  = 65;
 
-    switch vLivingroomMood.state {
-        case MOOD_MORNING: {
-            bulb1_value = 50;
-            bulb2_value = 50;
-            bulb3_value = 50;
-            bulb4_value = 50;
-        }
-        case MOOD_AFTERNOON: {
-            bulb1_value = 20;
-            bulb2_value = 20;
-            bulb3_value = 20;
-            bulb4_value = 20;
-        }
-        case MOOD_EARLY_EVENING: {
-            bulb1_value = 60;
-            bulb2_value = 60;
-            bulb3_value = 60;
-            bulb4_value = 60;
-        }
-        case MOOD_MID_EVENING: {
-            bulb1_value = 70;
-            bulb2_value = 70;
-            bulb3_value = 70;
-            bulb4_value = 70;
-        }
-        case MOOD_LATE_EVENING: {
-            bulb1_value = 85;
-            bulb2_value = 85;
-            bulb3_value = 85;
-            bulb4_value = 85;
-        }
-        case MOOD_BEDTIME: {
-            bulb1_value = 90;
-            bulb2_value = 90;
-            bulb3_value = 90;
-            bulb4_value = 90;
-        }
-        case MOOD_COZY: {
-            bulb1_value = 100;
-            bulb2_value = 100;
-            bulb3_value = 100;
-            bulb4_value = 100;
-        }
-        case MOOD_CHIPPER: {
-            bulb1_value = 0;
-            bulb2_value = 0;
-            bulb3_value = 0;
-            bulb4_value = 0;
-        }
-        case MOOD_FESTIVE_XMAS: {
-            bulb1_device = RgbwBulb1_Color
-            bulb1_value = new HSBType(new DecimalType(0), new PercentType(90), (RgbwBulb1_Color.state as HSBType).brightness);
+    var bulb5_device = RgbwBulb5_ColorTemperature;
+    var bulb5_value  = 65;
 
-            bulb2_device = RgbwBulb2_Color
-            bulb2_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
+    var bulb6_device = RgbwBulb6_ColorTemperature;
+    var bulb6_value  = 65;
 
-            bulb3_device = RgbwBulb3_Color
-            bulb3_value = new HSBType(new DecimalType(0), new PercentType(90), (RgbwBulb1_Color.state as HSBType).brightness);
+    var bulb7_device = RgbwBulb7_ColorTemperature;
+    var bulb7_value  = 65;
 
-            bulb4_device = RgbwBulb4_Color
-            bulb4_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
+    try {
+
+        switch vLivingroomMood.state {
+            case MOOD_MORNING: {
+                bulb1_value = 50;
+                bulb2_value = 50;
+                bulb3_value = 50;
+                bulb4_value = 50;
+                bulb5_value = 50;
+                bulb6_value = 50;
+                bulb7_value = 50;
+            }
+            case MOOD_AFTERNOON: {
+                bulb1_value = 20;
+                bulb2_value = 20;
+                bulb3_value = 20;
+                bulb4_value = 20;
+                bulb5_value = 20;
+                bulb6_value = 20;
+                bulb7_value = 20;
+            }
+            case MOOD_EARLY_EVENING: {
+                bulb1_value = 60;
+                bulb2_value = 60;
+                bulb3_value = 60;
+                bulb4_value = 60;
+                bulb5_value = 60;
+                bulb6_value = 60;
+                bulb7_value = 60;
+            }
+            case MOOD_MID_EVENING: {
+                bulb1_value = 70;
+                bulb2_value = 70;
+                bulb3_value = 70;
+                bulb4_value = 70;
+                bulb5_value = 70;
+                bulb6_value = 70;
+                bulb7_value = 70;
+            }
+            case MOOD_LATE_EVENING: {
+                bulb1_value = 85;
+                bulb2_value = 85;
+                bulb3_value = 85;
+                bulb4_value = 85;
+                bulb5_value = 85;
+                bulb6_value = 85;
+                bulb7_value = 85;
+            }
+            case MOOD_BEDTIME: {
+                bulb1_value = 90;
+                bulb2_value = 90;
+                bulb3_value = 90;
+                bulb4_value = 90;
+                bulb5_value = 90;
+                bulb6_value = 90;
+                bulb7_value = 90;
+            }
+            case MOOD_COZY: {
+                bulb1_value = 100;
+                bulb2_value = 100;
+                bulb3_value = 100;
+                bulb4_value = 100;
+                bulb5_value = 100;
+                bulb6_value = 100;
+                bulb7_value = 100;
+            }
+            case MOOD_CHIPPER: {
+                bulb1_value = 0;
+                bulb2_value = 0;
+                bulb3_value = 0;
+                bulb4_value = 0;
+                bulb5_value = 0;
+                bulb6_value = 0;
+                bulb7_value = 0;
+            }
+            case MOOD_FESTIVE_XMAS: {
+                bulb1_device = RgbwBulb1_Color
+                bulb1_value = new HSBType(new DecimalType(0), new PercentType(100),new PercentType(100));
+
+                bulb2_device = RgbwBulb2_Color
+                bulb2_value = new HSBType(new DecimalType(120), new PercentType(100), new PercentType(100));
+
+                bulb3_device = RgbwBulb3_Color
+                bulb3_value = new HSBType(new DecimalType(0), new PercentType(100), new PercentType(100));
+
+                bulb4_device = RgbwBulb4_Color
+                bulb4_value = new HSBType(new DecimalType(120), new PercentType(100), new PercentType(100));
+
+                bulb5_device = RgbwBulb5_Color
+                bulb5_value = new HSBType(new DecimalType(120), new PercentType(100), new PercentType(100));
+
+                bulb6_device = RgbwBulb6_Color
+                bulb6_value = new HSBType(new DecimalType(120), new PercentType(100), new PercentType(100));
+
+                bulb7_device = RgbwBulb7_Color
+                bulb7_value = new HSBType(new DecimalType(0), new PercentType(100), new PercentType(100));
+            }
+            case MOOD_FESTIVE_STP: {
+                bulb1_device = RgbwBulb1_Color
+                bulb1_value = new HSBType(new DecimalType(120), new PercentType(90), new PercentType(100));
+
+                bulb2_device = RgbwBulb2_Color
+                bulb2_value = new HSBType(new DecimalType(120), new PercentType(90), new PercentType(100));
+
+                bulb3_device = RgbwBulb3_Color
+                bulb3_value = new HSBType(new DecimalType(120), new PercentType(90), new PercentType(100));
+
+                bulb4_device = RgbwBulb4_Color
+                bulb4_value = new HSBType(new DecimalType(120), new PercentType(90), new PercentType(100));
+
+                bulb5_device = RgbwBulb5_Color
+                bulb5_value = new HSBType(new DecimalType(120), new PercentType(90), new PercentType(100));
+
+                bulb6_device = RgbwBulb6_Color
+                bulb6_value = new HSBType(new DecimalType(120), new PercentType(90), new PercentType(100));
+
+                bulb7_device = RgbwBulb7_Color
+                bulb7_value = new HSBType(new DecimalType(120), new PercentType(90), new PercentType(100));
+            }
+            case MOOD_FESTIVE_JULY4: {
+                bulb1_device = RgbwBulb1_Color
+                bulb1_value = new HSBType(new DecimalType(0), new PercentType(100), new PercentType(100));
+
+                bulb2_device = RgbwBulb2_Color
+                bulb2_value = new HSBType(new DecimalType(0), new PercentType(0), new PercentType(100));
+
+                bulb3_device = RgbwBulb3_Color
+                bulb3_value = new HSBType(new DecimalType(0), new PercentType(100), new PercentType(100));
+
+                bulb4_device = RgbwBulb4_Color
+                bulb4_value = new HSBType(new DecimalType(240), new PercentType(100), new PercentType(100));
+
+                bulb5_device = RgbwBulb5_Color
+                bulb5_value = new HSBType(new DecimalType(0), new PercentType(100), new PercentType(100));
+
+                bulb6_device = RgbwBulb6_Color
+                bulb6_value = new HSBType(new DecimalType(240), new PercentType(0), new PercentType(100));
+
+                bulb7_device = RgbwBulb7_Color
+                bulb7_value = new HSBType(new DecimalType(240), new PercentType(100), new PercentType(100));
+            }
+            case MOOD_FESTIVE_EASTER: {
+                bulb1_device = RgbwBulb1_Color
+                bulb1_value = new HSBType(new DecimalType(0), new PercentType(90), new PercentType(100));
+
+                bulb2_device = RgbwBulb2_Color
+                bulb2_value = new HSBType(new DecimalType(51.42), new PercentType(90), new PercentType(100));
+
+                bulb3_device = RgbwBulb3_Color
+                bulb3_value = new HSBType(new DecimalType(102.84), new PercentType(90), new PercentType(100));
+
+                bulb4_device = RgbwBulb4_Color
+                bulb4_value = new HSBType(new DecimalType(154.26), new PercentType(90), new PercentType(100));
+
+                bulb5_device = RgbwBulb5_Color
+                bulb5_value = new HSBType(new DecimalType(205.68), new PercentType(90), new PercentType(100));
+
+                bulb6_device = RgbwBulb6_Color
+                bulb6_value = new HSBType(new DecimalType(257.1), new PercentType(90), new PercentType(100));
+
+                bulb7_device = RgbwBulb7_Color
+                bulb7_value = new HSBType(new DecimalType(308.52), new PercentType(90), new PercentType(100));
+            }
+            case MOOD_FESTIVE_HALOWN: {
+                bulb1_device = RgbwBulb1_Color
+                bulb1_value = new HSBType(new DecimalType(30), new PercentType(100),new PercentType(100));
+
+                bulb2_device = RgbwBulb2_Color
+                bulb2_value = new HSBType(new DecimalType(30), new PercentType(100), new PercentType(100));
+
+                bulb3_device = RgbwBulb3_Color
+                bulb3_value = new HSBType(new DecimalType(30), new PercentType(100), new PercentType(100));
+
+                bulb4_device = RgbwBulb4_Color
+                bulb4_value = new HSBType(new DecimalType(30), new PercentType(100), new PercentType(100));
+
+                bulb5_device = RgbwBulb5_Color
+                bulb5_value = new HSBType(new DecimalType(30), new PercentType(100), new PercentType(100));
+
+                bulb6_device = RgbwBulb6_Color
+                bulb6_value = new HSBType(new DecimalType(265), new PercentType(100), new PercentType(40));
+
+                bulb7_device = RgbwBulb7_Color
+                bulb7_value = new HSBType(new DecimalType(265), new PercentType(100), new PercentType(40));
+            }
+
         }
-        case MOOD_FESTIVE_STP: {
-            bulb1_device = RgbwBulb1_Color
-            bulb1_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
-
-            bulb2_device = RgbwBulb2_Color
-            bulb2_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
-
-            bulb3_device = RgbwBulb3_Color
-            bulb3_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
-
-            bulb4_device = RgbwBulb4_Color
-            bulb4_value = new HSBType(new DecimalType(120), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
-        }
-        case MOOD_FESTIVE_JULY4: {
-            bulb1_device = RgbwBulb1_Color
-            bulb1_value = new HSBType(new DecimalType(0), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
-
-            bulb2_device = RgbwBulb2_Color
-            bulb2_value = new HSBType(new DecimalType(0), new PercentType(0), (RgbwBulb1_Color.state as HSBType).brightness);
-
-            bulb3_device = RgbwBulb3_Color
-            bulb3_value = new HSBType(new DecimalType(240), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
-
-            bulb4_device = RgbwBulb4_Color
-            bulb4_value = new HSBType(new DecimalType(240), new PercentType(80), (RgbwBulb1_Color.state as HSBType).brightness);
-        }
+    }
+    catch (Throwable t) {
+        logError("mood_applier", "failed to compute mood values: " + t.getMessage())
     }
 
     try {
         //automationLock.lock();
-        bulb1_device.sendCommand(bulb1_value);
-        bulb2_device.sendCommand(bulb2_value);
-        bulb3_device.sendCommand(bulb3_value);
-        bulb4_device.sendCommand(bulb4_value);
+        isUpdateAutomatic += 1;
+
+            bulb1_device.sendCommand(bulb1_value);
+            bulb2_device.sendCommand(bulb2_value);
+            bulb3_device.sendCommand(bulb3_value);
+            bulb4_device.sendCommand(bulb4_value);
+            bulb5_device.sendCommand(bulb5_value);
+            bulb6_device.sendCommand(bulb6_value);
+            bulb7_device.sendCommand(bulb7_value);
+
     }
     catch (Throwable t) {
-        logError("mood_applier", "failed to complete setting up scene: " + t.getMessage())
+        logError("mood_applier", "failed to complete setting up mood: " + t.getMessage())
     }
     finally {
         //automationLock.unlock();
+        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
     }
 
 end
@@ -759,23 +997,21 @@ end
 
 
 
-
-
 rule "Kitchen Evening Lights On"
 when
     Time cron "0 0 17 ? * *" or
-    Item KitchenMultisensor_SensorLuminance changed
+    Item KitchenMultisensor_SensorLuminance received update
 then
     //the lights should come up to 'evening' level if the luminace gets below 30, or 
     //at 5pm, whichever comes first
 
-    var Number hour = now.getHourOfDay()
+    var Number hour = now.getHour()
     var Number luminance = KitchenMultisensor_SensorLuminance.state as Number;
 
     if (((hour >= 14 && hour < 21) && luminance < 45) || hour == 17) {
         //automationLock.lock()
         try{
-            isUpdateAutomatic = 1;
+            isUpdateAutomatic += 1;
             if (isOKToTurnOnBecause.apply(KitchenCornerLight_Dimmer, REASON_TIME, lastStateReason, lastStateDate)) {
                 KitchenCornerLight_Dimmer.sendCommand(100);
                 lastStateReason.put(KitchenCornerLight_Dimmer.name, REASON_TIME);
@@ -787,13 +1023,37 @@ then
                 lastStateReason.put(KitchenSinkLights_Switch.name, REASON_TIME);
                 lastStateDate.put(KitchenSinkLights_Switch.name, now);
             }
-            Thread.sleep(200); //let everything catch up before turning off automatic updates
+
+            if (isOKToTurnOnBecause.apply(CounterLight_Dimmer, REASON_TIME, lastStateReason, lastStateDate)) {
+                CounterLight_Dimmer.sendCommand(100);
+                lastStateReason.put(CounterLight_Dimmer.name, REASON_TIME);
+                lastStateDate.put(CounterLight_Dimmer.name, now);
+            }
+
+            if (isOKToTurnOnBecause.apply(CoffeeLight_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
+                CoffeeLight_Dimmer.sendCommand(50);
+                CoffeeLight_Temperature.sendCommand(50);
+                lastStateReason.put(CoffeeLight_Dimmer.name, REASON_TIME);
+                lastStateDate.put(CoffeeLight_Dimmer.name, now);
+            }
+
+            if (isOKToTurnOnBecause.apply(DiningroomLights_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
+                DiningroomLights_Dimmer.sendCommand(50);
+                lastStateReason.put(DiningroomLights_Dimmer.name, REASON_TIME);
+                lastStateDate.put(DiningroomLights_Dimmer.name, now);
+            }
+
+            if (isOKToTurnOnBecause.apply(ChinaCabinet_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
+                ChinaCabinet_Dimmer.sendCommand(100);
+                lastStateReason.put(ChinaCabinet_Dimmer.name, REASON_TIME);
+                lastStateDate.put(ChinaCabinet_Dimmer.name, now);
+            }
         }
         catch (Throwable t) {
             logError("kitchen_evening", t.getMessage())
         }
         finally {
-            isUpdateAutomatic = 0;
+            createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
             //automationLock.unlock()
         }
     }
@@ -801,47 +1061,43 @@ end
 
 
 
+
+
+
 rule "Nighttime"
 when
     Time cron "0 30 22 ? * MON,TUE,WED,THU,SUN *" or
     Time cron "0 59 23 ? * FRI,SAT *" or
-    Item Scene_NightLights received command ON
+    Item Scene_NightLights received command ON or
+    Item Scene_AllOff received command ON
 then
     //automationLock.lock()
     try {
-        isUpdateAutomatic = 1;
-
-        vLivingroomScene.postUpdate(SCENE_DARK);
-        lastStateReason.put(vLivingroomScene.name, REASON_GOODNIGHT);
-        lastStateDate.put(vLivingroomScene.name, now); 
+        isUpdateAutomatic += 1;
 
         gGoodnightLights.members.forEach[ i | 
-            if (isOKToTurnOffBecause.apply(i, REASON_GOODNIGHT, lastStateReason, lastStateDate)) {
-                if (i instanceof DimmerItem /*&& OFF !== i.state && 0 !== i.state*/) {
-                    //it's a dimmer, and it's on - we'll set the dim level super low before turning it off
-                    //so that when nighlights turn on they're not too bright
-                    i.sendCommand(15)
-                }
-
-		Thread.sleep(500); //hopefully enough time to let the change actuall propagate out
-
+            //if (isOKToTurnOffBecause.apply(i, REASON_GOODNIGHT, lastStateReason, lastStateDate)) {
                 i.sendCommand(OFF);
                 lastStateReason.put(i.name, REASON_GOODNIGHT);
                 lastStateDate.put(i.name, now);
-            }
-            true
+            //}
         ]
 
-        Scene_NightLights.sendCommand(OFF);
+        
+        vLivingroomScene.postUpdate(SCENE_DARK);
+        lastStateReason.put(vLivingroomScene.name, REASON_GOODNIGHT);
+        lastStateDate.put(vLivingroomScene.name, now); 
+        
 
-        Thread.sleep(200);
+        Scene_NightLights.sendCommand(OFF);
+        Scene_AllOff.sendCommand(OFF);
     }
     catch (Throwable t) {
         logError("nighttime", t.getMessage())
     }
     finally {
-        Thread.sleep(300);
-        isUpdateAutomatic = 0;
+        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
+        //createTimer(now.plusSeconds(5), [ | isUpdateAutomatic = 0; ]);
         //automationLock.unlock()
     }
 end
@@ -857,15 +1113,15 @@ when
     Time cron "0  0 9 ? * SAT,SUN" or
     Item vIsLightOut changed from OFF to ON
 then
-    var ourreason = REASON_TIME;
+    var String ourreason = REASON_TIME;
 
-    if (triggeringItem !== null && triggeringItem.name == "vIsLightOut") {
+    if (triggeringItemName !== null && triggeringItemName == "vIsLightOut") {
         ourreason = REASON_WEATHER;
     }
 
     //automationLock.lock()
     try {
-        isUpdateAutomatic = 1;
+        isUpdateAutomatic += 1;
 
         gAllBlinds.members.filter[ b | !b.getGroupNames.contains("gBedroomBlinds") ].forEach [ b | 
             if (isOKToTurnOnBecause.apply(b, ourreason, lastStateReason, lastStateDate)) {
@@ -873,16 +1129,13 @@ then
                 lastStateReason.put(b.name, ourreason);
                 lastStateDate.put(b.name, now);
             }
-            true
         ]
-
-        Thread.sleep(200);
     }
     catch (Throwable t) {
         logError("non-bedroom blinds", t.getMessage())
     }
     finally {
-        isUpdateAutomatic = 0;
+        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
         //automationLock.unlock()
     }
 end
@@ -893,11 +1146,11 @@ when
     Time cron "0 45 8 ? * MON-FRI" or
     Time cron "0 15 9 ? * SAT,SUN"
 then
-    logInfo("bedroom blinds", "rule triggered")
+    logDebug("bedroom blinds", "rule triggered")
 
     //automationLock.lock()
     try {
-        isUpdateAutomatic = 1;
+        isUpdateAutomatic += 1;
 
         gBedroomBlinds.members.forEach [ b | 
             if (isOKToTurnOnBecause.apply(b, REASON_TIME, lastStateReason, lastStateDate)) {
@@ -906,18 +1159,55 @@ then
                 lastStateDate.put(b.name, now);
             }
         ]
-
-        Thread.sleep(200);
     }
     catch (Throwable t) {
         logError("bedroom blinds", t.getMessage())
     }
     finally {
-        isUpdateAutomatic = 0;
+        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
         //automationLock.unlock()
     }
 end
 
+rule "Upstairs Blinds Close when the sun comes around"
+when
+  Item LocalSun_Position_Azimuth changed   
+then
+  var int cloudiness =(LocalWeatherAndForecast_Current_Cloudiness.state as Number).intValue
+  var int sunpos = (LocalSun_Position_Azimuth.state as Number).intValue
+  var int sunelv = (LocalSun_Position_Elevation.state as Number).intValue
+
+  if (sunpos > 122 && sunpos < 130 && cloudiness < 50 && sunelv > 40) {
+    isUpdateAutomatic += 1;
+    createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
+    logInfo("upstairs-blinds-sun-close.rule", "closing upstairs blinds to prevent the sun from coming in")
+    if (isOKToTurnOffBecause.apply(RyansOfficeBlinds_Rollershutter, REASON_WEATHER, lastStateReason, lastStateDate)) {
+        RyansOfficeBlinds_Rollershutter.sendCommand(DOWN);
+        lastStateReason.put(RyansOfficeBlinds_Rollershutter.name, REASON_WEATHER);
+        lastStateDate.put(RyansOfficeBlinds_Rollershutter.name, now);
+    }
+    if (isOKToTurnOffBecause.apply(StairwellBlinds_Rollershutter, REASON_WEATHER, lastStateReason, lastStateDate)) {
+        StairwellBlinds_Rollershutter.sendCommand(DOWN);
+        lastStateReason.put(StairwellBlinds_Rollershutter.name, REASON_WEATHER);
+        lastStateDate.put(StairwellBlinds_Rollershutter.name, now);
+    }
+  }
+
+  if (sunpos > 214 && sunpos < 220 && sunelv > 40) {
+    isUpdateAutomatic += 1;
+    createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
+    if (isOKToTurnOnBecause.apply(RyansOfficeBlinds_Rollershutter, REASON_WEATHER, lastStateReason, lastStateDate)) {
+        RyansOfficeBlinds_Rollershutter.sendCommand(UP);
+        lastStateReason.put(RyansOfficeBlinds_Rollershutter.name, REASON_WEATHER);
+        lastStateDate.put(RyansOfficeBlinds_Rollershutter.name, now);
+    }
+    if (isOKToTurnOnBecause.apply(StairwellBlinds_Rollershutter, REASON_WEATHER, lastStateReason, lastStateDate)) {
+        StairwellBlinds_Rollershutter.sendCommand(UP);
+        lastStateReason.put(StairwellBlinds_Rollershutter.name, REASON_WEATHER);
+        lastStateDate.put(StairwellBlinds_Rollershutter.name, now);
+    }
+  }
+end
 
 rule "All blinds close when it gets dark out"
 when
@@ -926,30 +1216,31 @@ when
     Time cron "0 45 20 * * ?"
 then
     var ourreason = REASON_TIME;
-    if (triggeringItem !== null && triggeringItem.name == "vIsLightOut") {
+    if (triggeringItemName !== null && triggeringItemName == "vIsLightOut") {
         ourreason = REASON_WEATHER;
     }
 
     //automationLock.lock()
     try {
-        isUpdateAutomatic = 1;
+        isUpdateAutomatic += 1;
 
         gAllBlinds.members.forEach [ blind | 
-            if (isOKToTurnOnBecause.apply(blind, ourreason, lastStateReason, lastStateDate)) {
+	    logInfo("blinds_close", blind.name);
+            if (isOKToTurnOffBecause.apply(blind, ourreason, lastStateReason, lastStateDate)) {
                 blind.sendCommand(DOWN)
                 lastStateReason.put(blind.name, ourreason);
                 lastStateDate.put(blind.name, now);
             }
-            true
+	    else {
+		logError("blinds_close", "denied for " + blind.name);
+	    }
         ]
-
-        Thread.sleep(200);
     }
     catch (Throwable t) {
         logError("blinds close", t.getMessage())
     }
     finally {
-        isUpdateAutomatic = 0;
+        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
         //automationLock.unlock();
     }
 end
@@ -973,20 +1264,24 @@ then
   if (elevation < topElevation && elevation > 0 && temperature > 68) {
       //automationLock.lock()
       try{
-        isUpdateAutomatic = 1;
+        isUpdateAutomatic += 1;
         if (isOKToTurnOnBecause.apply(DeckLights_Switch, REASON_WEATHER, lastStateReason, lastStateDate)){
             DeckLights_Switch.sendCommand(ON);
             lastStateReason.put(DeckLights_Switch.name, REASON_WEATHER);
             lastStateDate.put(DeckLights_Switch.name, now);
         }
 
-        Thread.sleep(200);  
+        if (isOKToTurnOnBecause.apply(PorchLights_Switch, REASON_WEATHER, lastStateReason, lastStateDate)){
+            PorchLights_Switch.sendCommand(ON);
+            lastStateReason.put(PorchLights_Switch.name, REASON_WEATHER);
+            lastStateDate.put(PorchLights_Switch.name, now);
+        }
       }
       catch (Throwable t) {
         logError("deck lights", t.getMessage())
       }
       finally {
-        isUpdateAutomatic = 0;
+        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
         //automationLock.unlock()
       }
   }
@@ -1018,57 +1313,69 @@ then
     }
    
 
-    if (triggeringItem.state === ON && luminanceResult < 10) {
-        logInfo("nightlight", triggeringItem.name + " motion triggered with luminance in range");
+    if (triggeringItem.state == ON && luminanceResult < 10) {
+        logDebug("nightlight", triggeringItem.name + " motion triggered with luminance in range");
         //automationLock.lock()
         try {
-            isUpdateAutomatic = 1;
+            isUpdateAutomatic += 1;
 
 
             lightsGroup.members.forEach[ i |
                 if (isOKToTurnOnBecause.apply(i, REASON_MOTION, lastStateReason, lastStateDate)) {
-                    i.sendCommand(ON)
+                    //i.sendCommand(ON)
                     lastStateReason.put(i.name, REASON_MOTION)
                     lastStateDate.put(i.name, now)
-                    if(autoOffTimers.get(i.name)) {autoOffTimers.get(i.name).cancel();}
+                    if(autoOffTimers.get(i.name) != null) {autoOffTimers.get(i.name).cancel();}
                     autoOffTimers.put(i.name, null)
                 }
             ]
-
-            Thread.sleep(200)
         }
         catch(Throwable t) {
             logWarn("nightlight on", t.getMessage())
         }
         finally {
-            isUpdateAutomatic = 0;
+            createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
             //automationLock.unlock()
         }
     }
-    else if (triggeringItem.state === OFF) {
-        logInfo("nightlight", triggeringItem.name + " motion stopped");
+    else if (triggeringItem.state == ON) {
+        //we should still kill any running timers
+        lightsGroup.members.forEach[ i |
+            if(autoOffTimers.get(i.name) != null) {autoOffTimers.get(i.name).cancel();}
+            autoOffTimers.put(i.name, null)
+        ]
+
+    }
+    else if (triggeringItem.state == OFF) {
+        logDebug("nightlight", triggeringItem.name + " motion stopped");
         lightsGroup.members.forEach[ i |
             //if this light isn't on by motion now, there's no point in scheduling the timer
             if (lastStateReason.get(i.name) !== REASON_MOTION) {
+                //but still kill any running timer!!!
+                if(autoOffTimers.get(i.name) != null) {autoOffTimers.get(i.name).cancel();}
+                autoOffTimers.put(i.name, null)
                 return;
             }
 
+            if(autoOffTimers.get(i.name) != null) {autoOffTimers.get(i.name).cancel();}
+
             autoOffTimers.put(i.name, createTimer(now.plusMinutes(2), [ |
                 //automationLock.lock();
-                isUpdateAutomatic = 1;
+                isUpdateAutomatic += 1;
                 try{
                     if (isOKToTurnOffBecause.apply(i, REASON_MOTION, lastStateReason, lastStateDate)) {
-                        i.sendCommand(OFF)
+                        // i.sendCommand(OFF)
                         lastStateReason.put(i.name, REASON_MOTION)
                         lastStateDate.put(i.name, now)
+                        if(autoOffTimers.get(i.name) != null) {autoOffTimers.get(i.name).cancel();}
                         autoOffTimers.put(i.name, null)
                     }
                 }
                 catch(Throwable t) {
-                    logWarn("nightlight off", t.getMessage())
+                    logWarn("nightlight off", "Caught Exception: " + i.name + " " + t.getMessage())
                 }
                 finally{
-                    isUpdateAutomatic = 0;
+                    createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
                     //automationLock.unlock();
                 }
             ]))
@@ -1076,7 +1383,7 @@ then
     }
 end
 
-rule "Extreme High Humidity Triggers Fans"
+rule "Bathroom Humidity Triggers Fans"
 when
     Item MasterBathroom_RelativeHumidity changed
 then
@@ -1086,12 +1393,14 @@ then
 
     val Number humidity = MasterBathroom_RelativeHumidity.state as Number
     val fanState = MasterBathroomFan_Switch.state
+    val heaterState = BathroomHeater_Switch.state
     val fanStateReason = lastStateReason.get(MasterBathroomFan_Switch.name)
     val heaterStateReason = lastStateReason.get(BathroomHeater_Switch.name)
 
     if (humidity > 80 && (fanState == OFF || fanStateReason != REASON_HEALTH_SAFETY)) {
-        logWarn("bathroom high humidity", "Turning on bathroom fan due to extreme humidity");
-        isUpdateAutomatic = 1;
+        logWarn("bathroom extreme humidity", "Turning on bathroom fan due to extreme humidity");
+        isUpdateAutomatic += 1;
+        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
 
         lastStateReason.put(MasterBathroomFan_Switch.name, REASON_HEALTH_SAFETY);
         lastStateDate.put(MasterBathroomFan_Switch.name, now);
@@ -1100,60 +1409,42 @@ then
         lastStateReason.put(BathroomHeater_Switch.name, REASON_HEALTH_SAFETY);
         lastStateDate.put(BathroomHeater_Switch.name, now);
         BathroomHeater_Switch.sendCommand(ON);
-
-        Thread.sleep(200);
-
-        isUpdateAutomatic = 0;
     }
     else if (humidity < 60  && (fanStateReason == REASON_HEALTH_SAFETY || heaterStateReason == REASON_HEALTH_SAFETY)) {
-        logInfo("bathroom high humidity", "Humidity Cleared, turning off fan");
-        isUpdateAutomatic = 1; 
+        logInfo("bathroom extreme humidity", "Extreme Humidity Cleared, reducing reason to allow manual control");
+        isUpdateAutomatic += 1; 
+        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
 
-        MasterBathroomFan_Switch.sendCommand(OFF);
         lastStateReason.put(MasterBathroomFan_Switch.name, REASON_WEATHER); //something eles can override this
         lastStateDate.put(MasterBathroomFan_Switch.name, now);
 
         lastStateReason.put(BathroomHeater_Switch.name, REASON_WEATHER);
         lastStateDate.put(BathroomHeater_Switch.name, now);
         BathroomHeater_Switch.sendCommand(OFF);
-
-        Thread.sleep(200);
-
-        isUpdateAutomatic = 0;
     }
-end
+    else if (humidity > 60) {
+        isUpdateAutomatic += 1;
+        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
 
-rule "High Humidity Triggers Fans"
-when
-    Item MasterBathroom_RelativeHumidity changed
-then
-    val Number humidity = MasterBathroom_RelativeHumidity.state as Number
-    val fanState = MasterBathroomFan_Switch.state
-    
-    if (humidity > 60 && fanState == OFF) {
-        isUpdateAutomatic = 1;
+        logWarn("bathroom high humidity", "Turning on bathroom fan due to high humidity");
 
         if (isOKToTurnOnBecause.apply(MasterBathroomFan_Switch, REASON_WEATHER, lastStateReason, lastStateDate)){
+            logWarn("bathroom high humidity", "Turning on bathroom fan due to high humidity (past state check)");
+            MasterBathroomFan_Switch.sendCommand(ON);
             lastStateReason.put(MasterBathroomFan_Switch.name, REASON_WEATHER);
             lastStateDate.put(MasterBathroomFan_Switch.name, now);
-            MasterBathroomFan_Switch.sendCommand(ON);
         }
-
-        Thread.sleep(200);
-
-        isUpdateAutomatic = 0;
     }
     else if (humidity < 55 && fanState == ON) {
-        isUpdateAutomatic = 1; 
+        isUpdateAutomatic += 1; 
+        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
+
+        logInfo("bathroom high humidity", "Humidity Cleared, turning off fan");
 
         if (isOKToTurnOffBecause.apply(MasterBathroomFan_Switch, REASON_WEATHER, lastStateReason, lastStateDate)){
             MasterBathroomFan_Switch.sendCommand(OFF);
             lastStateReason.put(MasterBathroomFan_Switch.name, REASON_WEATHER);
             lastStateDate.put(MasterBathroomFan_Switch.name, now);
         }
-
-        Thread.sleep(200);
-
-        isUpdateAutomatic = 0;
     }
 end

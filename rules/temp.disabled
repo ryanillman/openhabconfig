@@ -1,0 +1,380 @@
+val String SCENE_MORNING   = "morning"
+val String SCENE_NORMAL    = "normal"
+val String SCENE_TV        = "tv"
+val String SCENE_MOVIE     = "movie"
+val String SCENE_COZY      = "cozy"
+val String SCENE_DARK      = "dark"
+
+
+val String MOOD_MORNING        = "morning"
+val String MOOD_AFTERNOON      = "afternoon"
+val String MOOD_EARLY_EVENING  = "early_evening"
+val String MOOD_MID_EVENING    = "mid_evening"
+val String MOOD_LATE_EVENING   = "late_evening"
+val String MOOD_BEDTIME        = "bedtime"
+val String MOOD_COZY           = "cozy"
+val String MOOD_CHIPPER        = "chipper"
+val String MOOD_FESTIVE_XMAS   = "xmas"
+val String MOOD_FESTIVE_STP    = "stpatricks"
+val String MOOD_FESTIVE_JULY4  = "july4"
+val String MOOD_FESTIVE_EASTER = "easter"
+
+
+rule "Livingroom set Scene"
+when
+  System started or
+  Item vLivingroomScene changed or
+  Time cron "0 */15 * ? * * "
+then
+  var sofa_level  = 100;
+  var floor1_level = 100;  
+  var floor2_level = 100;  
+  var mantle_level = ON;
+  var couch1_level = 100;
+  var couch2_level = 100;
+  var couch3_level = 100;
+  var curio_level = 100;
+
+  var reason;
+
+  var changeIsBySceneChange = true;
+
+
+    switch vLivingroomScene.state {
+        case SCENE_NORMAL: {
+            sofa_level  = 100;
+            floor1_level = 100;
+            floor2_level = 100;
+            mantle_level = ON;
+            curio_level = 100;
+        }
+        case SCENE_MORNING: {
+            sofa_level  = 30;
+            floor1_level = 30;
+            floor2_level = 30
+            mantle_level = OFF;
+            couch1_level = 35;
+            couch2_level = 35;
+            couch3_level = 35;
+            curio_level = 35;
+        } 
+        case SCENE_TV: {
+            sofa_level  = 18;
+            floor1_level = 5;
+            floor2_level = 0;
+            mantle_level = OFF;
+            couch1_level = 5;
+            couch2_level = 5;
+            couch3_level = 5;
+            curio_level = 15;
+        }
+        case SCENE_MOVIE: {
+            floor1_level = 5;
+            floor2_level = 5;
+            mantle_level = OFF;
+            couch1_level = 0;
+            couch2_level = 0;
+            couch3_level = 0;
+            curio_level = 0;
+        }
+        case SCENE_COZY: {
+            sofa_level  = 20;
+            floor1_level = 35;
+            floor2_level = 35;
+            mantle_level = OFF;
+            couch1_level = 35;
+            couch2_level = 35;
+            couch3_level = 35;
+            curio_level = 5;
+        }
+        case SCENE_DARK: {
+            sofa_level  = 0;
+            floor1_level = 0;
+            floor2_level = 0;
+            mantle_level = OFF;
+            couch1_level = 0;
+            couch2_level = 0;
+            couch3_level = 0;
+            curio_level = 0;
+        }  
+    }
+
+    logDebug("scenes", "setting scene " + vLivingroomScene.state);
+    //automationLock.lock()
+    try{
+
+
+
+            RgbwBulb6_Color.sendCommand(sofa_level);
+            RgbwBulb7_Color.sendCommand(sofa_level);
+            RgbwBulb5_Color.sendCommand(floor1_level);
+            RgbwBulb1_Color.sendCommand(floor2_level);
+            MantleLight_Switch.sendCommand(mantle_level);
+            RgbwBulb2_Color.sendCommand(couch1_level);
+            RgbwBulb3_Color.sendCommand(couch2_level);
+            RgbwBulb4_Color.sendCommand(couch3_level);
+            CurioCabinet_Dimmer.sendCommand(curio_level);
+
+        if (vLivingroomScene.state == SCENE_MOVIE || vLivingroomScene.state == SCENE_TV) {
+            logDebug("scenes", "new scene is MOVIE or TV");
+            //normally these items aren't controlled by the livingroom, but they're
+            //in view and can be annoying while watching TV
+            //since they don't participate in the scene, we'll set their status to manual
+            //so they don't come back up on their own for a while.
+            logDebug("scenes", "Movie time is triggering, checking diningroom light state: "  + (DiningroomLights_Dimmer.state as Number).toString);
+
+            if (DiningroomLights_Dimmer.state as Number > 20) {
+                logDebug("scenes", "Diningroom Lights were over 20")
+                DiningroomLights_Dimmer.sendCommand(15);
+            }
+
+            if (BarLights_Dimmer.state as Number > 10) {
+                BarLights_Dimmer.sendCommand(25);
+            }
+        } 
+
+        Thread.sleep(200); //let everything catch up before turning off automatic updates
+    }
+    catch (Throwable t) {
+        logError("scenes", "failed to complete setting up scene: " + t.getMessage())
+    }
+    finally {
+
+    }
+  
+end
+
+
+rule "Livingroom Set Mood"
+when
+    System started or
+    Item vLivingroomMood changed or
+    Time cron "0 */15 * ? * * "
+then
+    if (null === vLivingroomMood.state) {
+        logError("mood_applier", "vLivingroomMood.state was null");
+        return;
+    }
+
+    logDebug("mood_applier", "mood changed " + vLivingroomMood.state);
+    //could do this in an array, but it will eventually be a random list
+    //of bulb ids; we're not doing them all just hte ones that are in the living room
+    //100 = candellight, 0 = 6000k/daylight
+    var bulb1_check  = RgbwBulb1_Color;
+    var bulb1_device = RgbwBulb1_ColorTemperature;
+    var bulb1_value  = 65;
+
+    var bulb2_check  = RgbwBulb2_Color;
+    var bulb2_device = RgbwBulb2_ColorTemperature;
+    var bulb2_value  = 65;
+
+    var bulb3_check  = RgbwBulb3_Color;
+    var bulb3_device = RgbwBulb3_ColorTemperature;
+    var bulb3_value  = 65;
+
+    var bulb4_check  = RgbwBulb4_Color;
+    var bulb4_device = RgbwBulb4_ColorTemperature;
+    var bulb4_value  = 65;
+
+    var bulb5_check  = RgbwBulb5_Color;
+    var bulb5_device = RgbwBulb5_ColorTemperature;
+    var bulb5_value  = 65;
+
+    var bulb6_check  = RgbwBulb6_Color;
+    var bulb6_device = RgbwBulb6_ColorTemperature;
+    var bulb6_value  = 65;
+
+    var bulb7_check  = RgbwBulb7_Color;
+    var bulb7_device = RgbwBulb7_ColorTemperature;
+    var bulb7_value  = 65;
+
+    try {
+
+        switch vLivingroomMood.state {
+            case MOOD_MORNING: {
+                bulb1_value = 50;
+                bulb2_value = 50;
+                bulb3_value = 50;
+                bulb4_value = 50;
+                bulb5_value = 50;
+                bulb6_value = 50;
+                bulb7_value = 50;
+            }
+            case MOOD_AFTERNOON: {
+                bulb1_value = 20;
+                bulb2_value = 20;
+                bulb3_value = 20;
+                bulb4_value = 20;
+                bulb5_value = 20;
+                bulb6_value = 20;
+                bulb7_value = 20;
+            }
+            case MOOD_EARLY_EVENING: {
+                bulb1_value = 60;
+                bulb2_value = 60;
+                bulb3_value = 60;
+                bulb4_value = 60;
+                bulb5_value = 60;
+                bulb6_value = 60;
+                bulb7_value = 60;
+            }
+            case MOOD_MID_EVENING: {
+                bulb1_value = 70;
+                bulb2_value = 70;
+                bulb3_value = 70;
+                bulb4_value = 70;
+                bulb5_value = 70;
+                bulb6_value = 70;
+                bulb7_value = 70;
+            }
+            case MOOD_LATE_EVENING: {
+                bulb1_value = 85;
+                bulb2_value = 85;
+                bulb3_value = 85;
+                bulb4_value = 85;
+                bulb5_value = 85;
+                bulb6_value = 85;
+                bulb7_value = 85;
+            }
+            case MOOD_BEDTIME: {
+                bulb1_value = 90;
+                bulb2_value = 90;
+                bulb3_value = 90;
+                bulb4_value = 90;
+                bulb5_value = 90;
+                bulb6_value = 90;
+                bulb7_value = 90;
+            }
+            case MOOD_COZY: {
+                bulb1_value = 100;
+                bulb2_value = 100;
+                bulb3_value = 100;
+                bulb4_value = 100;
+                bulb5_value = 100;
+                bulb6_value = 100;
+                bulb7_value = 100;
+            }
+            case MOOD_CHIPPER: {
+                bulb1_value = 0;
+                bulb2_value = 0;
+                bulb3_value = 0;
+                bulb4_value = 0;
+                bulb5_value = 0;
+                bulb6_value = 0;
+                bulb7_value = 0;
+            }
+            case MOOD_FESTIVE_XMAS: {
+                bulb1_device = RgbwBulb1_Color
+                bulb1_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
+
+                bulb2_device = RgbwBulb2_Color
+                bulb2_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
+
+                bulb3_device = RgbwBulb3_Color
+                bulb3_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
+
+                bulb4_device = RgbwBulb4_Color
+                bulb4_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
+
+                bulb5_device = RgbwBulb5_Color
+                bulb5_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
+
+                bulb6_device = RgbwBulb6_Color
+                bulb6_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
+
+                bulb7_device = RgbwBulb7_Color
+                bulb7_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
+            }
+            case MOOD_FESTIVE_STP: {
+                bulb1_device = RgbwBulb1_Color
+                bulb1_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
+
+                bulb2_device = RgbwBulb2_Color
+                bulb2_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
+
+                bulb3_device = RgbwBulb3_Color
+                bulb3_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
+
+                bulb4_device = RgbwBulb4_Color
+                bulb4_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
+
+                bulb5_device = RgbwBulb5_Color
+                bulb5_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
+
+                bulb6_device = RgbwBulb6_Color
+                bulb6_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
+
+                bulb7_device = RgbwBulb7_Color
+                bulb7_value = new HSBType(new DecimalType(120), new PercentType(90), if (null === RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
+            }
+            case MOOD_FESTIVE_JULY4: {
+                bulb1_device = RgbwBulb1_Color
+                bulb1_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
+
+                bulb2_device = RgbwBulb2_Color
+                bulb2_value = new HSBType(new DecimalType(0), new PercentType(0), if (null === RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
+
+                bulb3_device = RgbwBulb3_Color
+                bulb3_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
+
+                bulb4_device = RgbwBulb4_Color
+                bulb4_value = new HSBType(new DecimalType(240), new PercentType(100), if (null === RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
+
+                bulb5_device = RgbwBulb5_Color
+                bulb5_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
+
+                bulb6_device = RgbwBulb6_Color
+                bulb6_value = new HSBType(new DecimalType(240), new PercentType(0), if (null === RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
+
+                bulb7_device = RgbwBulb7_Color
+                bulb7_value = new HSBType(new DecimalType(0), new PercentType(100), if (null === RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
+            }
+            case MOOD_FESTIVE_EASTER: {
+                bulb1_device = RgbwBulb1_Color
+                bulb1_value = new HSBType(new DecimalType(0), new PercentType(90), if (null === RgbwBulb1_Color.state) {100} else {(RgbwBulb1_Color.state as HSBType).brightness});
+
+                bulb2_device = RgbwBulb2_Color
+                bulb2_value = new HSBType(new DecimalType(51.42), new PercentType(90), if (null === RgbwBulb2_Color.state) {100} else {(RgbwBulb2_Color.state as HSBType).brightness});
+
+                bulb3_device = RgbwBulb3_Color
+                bulb3_value = new HSBType(new DecimalType(102.84), new PercentType(90), if (null === RgbwBulb3_Color.state) {100} else {(RgbwBulb3_Color.state as HSBType).brightness});
+
+                bulb4_device = RgbwBulb4_Color
+                bulb4_value = new HSBType(new DecimalType(154.26), new PercentType(90), if (null === RgbwBulb4_Color.state) {100} else {(RgbwBulb4_Color.state as HSBType).brightness});
+
+                bulb5_device = RgbwBulb5_Color
+                bulb5_value = new HSBType(new DecimalType(205.68), new PercentType(90), if (null === RgbwBulb5_Color.state) {100} else {(RgbwBulb5_Color.state as HSBType).brightness});
+
+                bulb6_device = RgbwBulb6_Color
+                bulb6_value = new HSBType(new DecimalType(257.1), new PercentType(90), if (null === RgbwBulb6_Color.state) {100} else {(RgbwBulb6_Color.state as HSBType).brightness});
+
+                bulb7_device = RgbwBulb7_Color
+                bulb7_value = new HSBType(new DecimalType(308.52), new PercentType(90), if (null === RgbwBulb7_Color.state) {100} else {(RgbwBulb7_Color.state as HSBType).brightness});
+            }
+        }
+    }
+    catch (Throwable t) {
+        logError("mood_applier", "failed to compute mood values: " + t.getMessage())
+    }
+
+    try {
+        //automationLock.lock();
+
+            bulb1_device.sendCommand(bulb1_value);
+            bulb2_device.sendCommand(bulb2_value);
+            bulb3_device.sendCommand(bulb3_value);
+            bulb4_device.sendCommand(bulb4_value);
+            bulb5_device.sendCommand(bulb5_value);
+            bulb6_device.sendCommand(bulb6_value);
+            bulb7_device.sendCommand(bulb7_value);
+
+        Thread.sleep(300);
+    }
+    catch (Throwable t) {
+        logError("mood_applier", "failed to complete setting up mood: " + t.getMessage())
+    }
+    finally {
+        //automationLock.unlock();
+    }
+
+end

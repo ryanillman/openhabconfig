@@ -1,0 +1,14 @@
+rule "Arming Alarm raises DEFCON to 4"
+when 
+    Item vAlarmPanelState changed
+then
+    
+end
+
+
+rule "Master bathroom fan testing"
+when
+    Item MasterBathroomFan_Switch changed
+then
+    logInfo("bathroom fan debugger", "received CHANGED event from " + previousState +  " to " + triggeringItem.state.toString())
+end
