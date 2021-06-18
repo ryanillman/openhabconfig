@@ -3,7 +3,6 @@ Switch Scene_NightLights   "Night Lights"   (LightingScenes) [ "Switchable" ]
 Switch Scene_AllOff   "Goodnight Trigger"   (LightingScenes) [ "Switchable" ]
 
 
-
 Group gLivingroomBlinds
 Group gNookBlinds
 Group gUpstairsBlinds

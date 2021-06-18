@@ -1,6 +1,6 @@
 import java.util.HashMap
 import java.util.concurrent.locks.ReentrantLock
-import org.eclipse.smarthome.model.script.ScriptServiceUtil
+import org.openhab.core.model.script.ScriptServiceUtil
 
 
 //constants
@@ -38,26 +38,25 @@ val String MOOD_FESTIVE_EASTER = "easter"
 val String MOOD_FESTIVE_HALOWN = "halloween"
 
 val HashMap<String, String>   lastStateReason = newHashMap()
-val HashMap<String, DateTime> lastStateDate   = newHashMap()
+val HashMap<String, ZonedDateTime> lastStateDate   = newHashMap()
 val HashMap<String, Timer>    autoOffTimers   = newHashMap()
 
-val ReentrantLock automationLock = null //new ReentrantLock()
+//val ReentrantLock automationLock = null //new ReentrantLock()
 
 
-val org.eclipse.xtext.xbase.lib.Functions$Function4 <GenericItem, String, HashMap<String, String>, HashMap<String, DateTime>, Boolean> isOKToTurnOnBecause = [ 
-    GenericItem item, String reason, HashMap<String, String> itemReason, HashMap<String, DateTime> itemTime | 
+val isOKToTurnOnBecause = [ GenericItem item, String reason, HashMap<String, String> itemReason, HashMap<String, ZonedDateTime> itemTime | 
 
     var String oldReason = itemReason.get(item.name);
-    if (oldReason === null) { oldReason = ""; }
+    if (null === oldReason) { oldReason = ""; }
 
     var currentState = item.state;
     
     //90 minutes seems like a good wait time for manual overrides. we'll see how it goes
     //this will probably come from group membership or something
-    var DateTime oldTime
+    var ZonedDateTime oldTime;
     try {
         oldTime = itemTime.get(item.name);
-        if (oldTime === null) { oldTime = now; }
+        if (null === oldTime) { oldTime = now; }
     } catch (Throwable t) {
         logWarn("isOKToTurnOn", "Failed getting a time:" + t.getMessage())
         oldTime = now.minusMinutes(100)
@@ -115,20 +114,19 @@ val org.eclipse.xtext.xbase.lib.Functions$Function4 <GenericItem, String, HashMa
     retval
 ]
 
-val org.eclipse.xtext.xbase.lib.Functions$Function4<GenericItem, String, HashMap<String, String>, HashMap<String, DateTime>, Boolean> isOKToTurnOffBecause = [ 
-    GenericItem item, String reason, HashMap<String, String> itemReason, HashMap<String, DateTime> itemTime | 
+val isOKToTurnOffBecause = [ GenericItem item, String reason, HashMap<String, String> itemReason, HashMap<String, ZonedDateTime> itemTime | 
 
     var String oldReason = itemReason.get(item.name);
-    if (oldReason === null) { oldReason = ""; }
+    if (null == oldReason) { oldReason = ""; }
 
     var currentState = item.state;
     
     //90 minutes seems like a good wait time for manual overrides. we'll see how it goes
     //this will probably come from group membership or something
-    var DateTime oldTime
+    var ZonedDateTime oldTime
     try {
         oldTime = itemTime.get(item.name);
-        if (oldTime === null) { oldTime = now; }
+        if (null == oldTime) { oldTime = now; }
     } catch (Throwable t) {
         logWarn("isOKToTurnOFF", "Failed getting a time:" + t.getMessage())
         oldTime = now.minusMinutes(100);
@@ -182,7 +180,7 @@ val org.eclipse.xtext.xbase.lib.Functions$Function4<GenericItem, String, HashMap
 //that an ongoing automatic operation is running, 
 //to distinguish from an update caused by a person
 //pushing a button/switch or giving Alexa a command
-var Number isUpdateAutomatic = 0
+var int isUpdateAutomatic = 0
 
 
 
@@ -194,10 +192,10 @@ rule "gTrackStateReason item changed so track manual state"
 when
     Member of gTrackStateReason received command
 then
-    var boolean appearsToBeManual = null;
-    var string oldReason = lastStateReason.get(triggeringItem.name);
+    var boolean appearsToBeManual = false;
+    var String oldReason = lastStateReason.get(triggeringItem.name);
 
-    if (lastStateDate.get(triggeringItem.name)) {
+    if (lastStateDate.get(triggeringItem.name) != null) {
         lastStateDate.put(triggeringItem.name, now);
     }
 
@@ -242,7 +240,7 @@ then
                 return String::format("%40s", i.name) + "( "+i.state.toString()+" ) => " + lastReason + " at " + lastDate ;
             ].reduce[ list, i | return if (i !== null) {list + "\n" + i} else if (list !== null) {list} else {""}];
 
-            reasonList += "\nisUpdateAutomatic = " + isUpdateAutomatic "\n";
+            reasonList += "\nisUpdateAutomatic = " + isUpdateAutomatic + "\n";
         }
         catch (Throwable t) {
             reasonList = "shit blew up coming up with the list"
@@ -289,7 +287,7 @@ then
 
     if (delay == 999) {delay = 1;} //999 is a flag for 'not found'
 
-    logDebug("autooff_60", "Auto-off item turned on: " + item.name + " setting delay: " + delay); 
+    logInfo("autooff_*", "Auto-off item turned on: " + item.name + " setting delay: " + delay); 
 
     
 
@@ -298,14 +296,14 @@ then
         try {
             isUpdateAutomatic += 1;
 
-            logDebug("autooff_60", "Auto-off  item timer expired: " + item.name);
+            logInfo("autooff_*", "Auto-off  item timer expired: " + item.name);
 
             item.sendCommand(OFF);
             lastStateReason.put(item.name, REASON_TIMER);
             lastStateDate.put(item.name, now);
         }
         catch (Throwable t) {
-            logError("gAutoOff_60", t.getMessage())
+            logError("gAutoOff_*", "Failed to turn off: " + t.getMessage())
         }
         finally {
             createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
@@ -324,7 +322,7 @@ when
 then
     var Number luminance
     var Number elevation
-    var Number time = (now.getHourOfDay() * 100) + now.getMinuteOfHour()
+    var Number time = (now.getHour() * 100) + now.getMinute()
     
     try {
         luminance = (FrontPorchMultisensor_SensorLuminance.state as Number).intValue
@@ -371,7 +369,7 @@ then
         lastStateDate.put(vLivingroomScene.name, now);
 
 
-        if (now.getDayOfWeek < 6 && RyanPresent.state == ON) {         
+        if (now.getDayOfWeek().getValue() < 6 && RyanPresent.state == ON) {         
             RyansDeskLamp_Dimmer.sendCommand(40);
             lastStateReason.put(RyansDeskLamp_Dimmer.name, REASON_TIME);
             lastStateDate.put(RyansDeskLamp_Dimmer.name, now);
@@ -387,9 +385,11 @@ then
             lastStateDate.put(RgbwBulb8_Color.name, now);   
         }
 
-        CoffeeLight_Switch.sendCommand(ON);
-        lastStateReason.put(CoffeeLight_Switch.name, REASON_TIME);
-        lastStateDate.put(CoffeeLight_Switch.name, now);
+        CoffeeLight_Dimmer.sendCommand(100);
+        lastStateReason.put(CoffeeLight_Dimmer.name, REASON_TIME);
+        lastStateDate.put(CoffeeLight_Dimmer.name, now);
+
+        CoffeeLight_Temperature2.sendCommand(100);
     }
     catch (Throwable t) {
         logError("morning_lights", t.getMessage())
@@ -411,10 +411,16 @@ then
     try {
         isUpdateAutomatic += 1;
 
-        if (isOKToTurnOffBecause.apply(CoffeeLight_Switch, REASON_TIME, lastStateReason, lastStateDate)){
-            CoffeeLight_Switch.sendCommand(OFF);
-            lastStateReason.put(CoffeeLight_Switch.name, REASON_TIME);
-            lastStateDate.put(CoffeeLight_Switch.name, now);
+        if (isOKToTurnOffBecause.apply(CoffeeLight_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
+            CoffeeLight_Dimmer.sendCommand(0);
+            lastStateReason.put(CoffeeLight_Dimmer.name, REASON_TIME);
+            lastStateDate.put(CoffeeLight_Dimmer.name, now);
+        }
+
+        if (isOKToTurnOnBecause.apply(CoffeeLight_Color, REASON_TIME, lastStateReason, lastStateDate)){
+            CoffeeLight_Color.sendCommand(new HSBType(new DecimalType(290), new PercentType(50), new PercentType(90)););
+            lastStateReason.put(CoffeeLight_Color.name, REASON_TIME);
+            lastStateDate.put(CoffeeLight_Color.name, now);
         }
 
         if (isOKToTurnOnBecause.apply(BarLights_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
@@ -437,22 +443,24 @@ when
     System started or
     Time cron "0 */10 * ? * *"
 then
-    var String currentMood = vLivingroomMood.state;
-    var Number hour = now.getHourOfDay();
-    var boolean isWorkNight = now.getDayOfWeek != 5 && now.getDayOfWeek != 6;
+    var String currentMood = vLivingroomMood.state.toString();
+    var Number hour = now.getHour();
+    var Number month = now.getMonthValue();
+    var Number day = now.getDayOfMonth();
+    var boolean isWorkNight = now.getDayOfWeek() != 5 && now.getDayOfWeek() != 6;
     var String newMood = null;
 
 
-    if (now.getMonthOfYear == 12 && now.getDayOfMonth==25) {
+    if (month == 12 && day == 25) {
         newMood = MOOD_FESTIVE_XMAS;
     }
-    else if (now.getMonthOfYear == 3 && now.getDayOfMonth==17) {
+    else if (month  == 3 && day == 17) {
         newMood = MOOD_FESTIVE_STP;
     }
-    else if (now.getMonthOfYear == 7 && now.getDayOfMonth==4) {
+    else if (month == 7 && day == 4) {
         newMood = MOOD_FESTIVE_JULY4;
     }
-    else if (now.getMonthOfYear == 10 && now.getDayOfMonth==31){
+    else if (month == 10 && day == 31){
         newMood = MOOD_FESTIVE_HALOWN;
     }
     else if (hour == 4) {
@@ -475,7 +483,7 @@ then
     } 
 
 
-    if (newMood !== null) {
+    if (null !== newMood ) {
         try{
             isUpdateAutomatic += 1;
             createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
@@ -510,7 +518,7 @@ then
     var Number luminance = null;
 
     try {
-        hour = now.getHourOfDay();
+        hour = now.getHour();
         if (null !== LivingRoomMultisensor_SensorLuminance.state){
             luminance = LivingRoomMultisensor_SensorLuminance.state as Number;
         }
@@ -519,7 +527,7 @@ then
         }
     }
     catch(Throwable ex) {
-        if (null === luminace) {luminance = 50;}
+        if (null === luminance) {luminance = 50;}
     }
 
     isUpdateAutomatic += 1;
@@ -566,7 +574,7 @@ then
   var curio_level = 100;
   var xmas_level = 100;
 
-  var reason;
+  var String reason;
 
   if (null !== lastStateReason.get(vLivingroomScene.name) && REASON_MANUAL !== lastStateReason.get(vLivingroomScene.name)) {
       reason = lastStateReason.get(vLivingroomScene.name);
@@ -733,7 +741,7 @@ then
         return;
     }
 
-    var reason;
+    var String reason;
 
     if (null !== lastStateReason.get(vLivingroomMood.name) && REASON_MANUAL !== lastStateReason.get(vLivingroomScene.name)) {
         reason = lastStateReason.get(vLivingroomMood.name);
@@ -997,7 +1005,7 @@ then
     //the lights should come up to 'evening' level if the luminace gets below 30, or 
     //at 5pm, whichever comes first
 
-    var Number hour = now.getHourOfDay()
+    var Number hour = now.getHour()
     var Number luminance = KitchenMultisensor_SensorLuminance.state as Number;
 
     if (((hour >= 14 && hour < 21) && luminance < 45) || hour == 17) {
@@ -1022,10 +1030,11 @@ then
                 lastStateDate.put(CounterLight_Dimmer.name, now);
             }
 
-            if (isOKToTurnOnBecause.apply(CoffeeLight_Switch, REASON_TIME, lastStateReason, lastStateDate)){
-                CoffeeLight_Switch.sendCommand(ON);
-                lastStateReason.put(CoffeeLight_Switch.name, REASON_TIME);
-                lastStateDate.put(CoffeeLight_Switch.name, now);
+            if (isOKToTurnOnBecause.apply(CoffeeLight_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
+                CoffeeLight_Dimmer.sendCommand(50);
+                CoffeeLight_Temperature.sendCommand(50);
+                lastStateReason.put(CoffeeLight_Dimmer.name, REASON_TIME);
+                lastStateDate.put(CoffeeLight_Dimmer.name, now);
             }
 
             if (isOKToTurnOnBecause.apply(DiningroomLights_Dimmer, REASON_TIME, lastStateReason, lastStateDate)){
@@ -1067,12 +1076,11 @@ then
         isUpdateAutomatic += 1;
 
         gGoodnightLights.members.forEach[ i | 
-            if (isOKToTurnOffBecause.apply(i, REASON_GOODNIGHT, lastStateReason, lastStateDate)) {
+            //if (isOKToTurnOffBecause.apply(i, REASON_GOODNIGHT, lastStateReason, lastStateDate)) {
                 i.sendCommand(OFF);
                 lastStateReason.put(i.name, REASON_GOODNIGHT);
                 lastStateDate.put(i.name, now);
-            }
-            true
+            //}
         ]
 
         
@@ -1089,7 +1097,7 @@ then
     }
     finally {
         createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
-        createTimer(now.plusSeconds(5), [ | isUpdateAutomatic = 0; ]);
+        //createTimer(now.plusSeconds(5), [ | isUpdateAutomatic = 0; ]);
         //automationLock.unlock()
     }
 end
@@ -1105,9 +1113,9 @@ when
     Time cron "0  0 9 ? * SAT,SUN" or
     Item vIsLightOut changed from OFF to ON
 then
-    var ourreason = REASON_TIME;
+    var String ourreason = REASON_TIME;
 
-    if (triggeringItem !== null && triggeringItem.name == "vIsLightOut") {
+    if (triggeringItemName !== null && triggeringItemName == "vIsLightOut") {
         ourreason = REASON_WEATHER;
     }
 
@@ -1121,7 +1129,6 @@ then
                 lastStateReason.put(b.name, ourreason);
                 lastStateDate.put(b.name, now);
             }
-            true
         ]
     }
     catch (Throwable t) {
@@ -1209,7 +1216,7 @@ when
     Time cron "0 45 20 * * ?"
 then
     var ourreason = REASON_TIME;
-    if (triggeringItem !== null && triggeringItem.name == "vIsLightOut") {
+    if (triggeringItemName !== null && triggeringItemName == "vIsLightOut") {
         ourreason = REASON_WEATHER;
     }
 
@@ -1306,7 +1313,7 @@ then
     }
    
 
-    if (triggeringItem.state === ON && luminanceResult < 10) {
+    if (triggeringItem.state == ON && luminanceResult < 10) {
         logDebug("nightlight", triggeringItem.name + " motion triggered with luminance in range");
         //automationLock.lock()
         try {
@@ -1318,7 +1325,7 @@ then
                     //i.sendCommand(ON)
                     lastStateReason.put(i.name, REASON_MOTION)
                     lastStateDate.put(i.name, now)
-                    if(autoOffTimers.get(i.name)) {autoOffTimers.get(i.name).cancel();}
+                    if(autoOffTimers.get(i.name) != null) {autoOffTimers.get(i.name).cancel();}
                     autoOffTimers.put(i.name, null)
                 }
             ]
@@ -1331,26 +1338,26 @@ then
             //automationLock.unlock()
         }
     }
-    else if (triggeringItem.state === ON) {
+    else if (triggeringItem.state == ON) {
         //we should still kill any running timers
         lightsGroup.members.forEach[ i |
-            if(autoOffTimers.get(i.name)) {autoOffTimers.get(i.name).cancel();}
+            if(autoOffTimers.get(i.name) != null) {autoOffTimers.get(i.name).cancel();}
             autoOffTimers.put(i.name, null)
         ]
 
     }
-    else if (triggeringItem.state === OFF) {
+    else if (triggeringItem.state == OFF) {
         logDebug("nightlight", triggeringItem.name + " motion stopped");
         lightsGroup.members.forEach[ i |
             //if this light isn't on by motion now, there's no point in scheduling the timer
             if (lastStateReason.get(i.name) !== REASON_MOTION) {
                 //but still kill any running timer!!!
-                if(autoOffTimers.get(i.name)) {autoOffTimers.get(i.name).cancel();}
+                if(autoOffTimers.get(i.name) != null) {autoOffTimers.get(i.name).cancel();}
                 autoOffTimers.put(i.name, null)
                 return;
             }
 
-            if(autoOffTimers.get(i.name)) {autoOffTimers.get(i.name).cancel();}
+            if(autoOffTimers.get(i.name) != null) {autoOffTimers.get(i.name).cancel();}
 
             autoOffTimers.put(i.name, createTimer(now.plusMinutes(2), [ |
                 //automationLock.lock();
@@ -1360,7 +1367,7 @@ then
                         // i.sendCommand(OFF)
                         lastStateReason.put(i.name, REASON_MOTION)
                         lastStateDate.put(i.name, now)
-                        if(autoOffTimers.get(i.name)) {autoOffTimers.get(i.name).cancel();}
+                        if(autoOffTimers.get(i.name) != null) {autoOffTimers.get(i.name).cancel();}
                         autoOffTimers.put(i.name, null)
                     }
                 }

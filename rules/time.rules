@@ -115,7 +115,7 @@ when
   Item RyanWorking changed or
   Item RyanInMeeting changed
 then
-  logDebug("ryan_work_light", "something changed " + triggeringItem.name);
+  logDebug("ryan_work_light", "something changed " + triggeringItemName);
 
   if (ON == RyanInMeeting.state) {
     logDebug("ryan_work_light", "in a meeting");
@@ -123,7 +123,7 @@ then
   }
   else if (ON == RyanWorking.state) {
     logDebug("ryan_work_light", "working");
-    RgbwBulb8_Color.sendCommand(new HSBType(new DecimalType(40), new PercentType(100), new PercentType(50)));
+    RgbwBulb8_Color.sendCommand(new HSBType(new DecimalType(50), new PercentType(100), new PercentType(50)));
   }
   else {
     logDebug("ryan_work_light", "not working");

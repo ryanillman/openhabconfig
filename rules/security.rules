@@ -10,5 +10,5 @@ rule "Master bathroom fan testing"
 when
     Item MasterBathroomFan_Switch changed
 then
-    logInfo("bathroom fan debugger", "received CHANGED event from " + previousState +  " to " + triggeringItem.state)
+    logInfo("bathroom fan debugger", "received CHANGED event from " + previousState +  " to " + triggeringItem.state.toString())
 end
