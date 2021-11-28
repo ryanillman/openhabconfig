@@ -8,8 +8,8 @@ var Number blindsUnderManualControl = 0
 
 rule "Ryan's Alarm On"
 when
-  Time cron "0 30 5 ? * MON-FRI" or
-  Time cron "1 30 5 ? * MON-FRI"
+  Time cron "0 15 5 ? * MON-FRI" or
+  Time cron "1 15 5 ? * MON-FRI"
 then
   logInfo("ryans-alarm.rule", "In Ryan's Alarm")
 
@@ -45,7 +45,7 @@ end
 
 rule "Ryans Alarm Off"
 when
-  Time cron "0 45 6 ? * *" or
+  Time cron "0 31 6 ? * *" or
   Item RyanPresent changed to OFF
 then
   RyansLamp_Dimmer.sendCommand(OFF)
@@ -64,10 +64,11 @@ end
 
 rule "Occasional Office Scentsy"
 when
-  Time cron "0 0 8,11,13,16 ? * *"
+  Time cron "0 0 8,12,16 ? * *"
 then
   if (RyanPresent.state == ON) {
-    RyanScentsyWarmer_Dimmer.sendCommand(ON);
+    RyanScentsyWarmer_Dimmer.sendCommand(100);
+    CaitScentsyWarmer.sendCommand(100);
   }
 end
 
@@ -132,3 +133,47 @@ then
   }
 end
 
+
+
+rule "Porch Lights Off"
+when
+	Time cron "0 0 0 ? * * "
+then
+	FrontPorchLight1_Color.sendCommand(OFF);
+	FrontPorchLight2_Color.sendCommand(OFF);
+	BackPorchLight1_Color.sendCommand(OFF);
+	BackPorchLight2_Color.sendCommand(OFF);
+end
+
+
+rule "Porch Lights Day"
+when
+	Time cron "0 0 5 ? * * "
+then
+	FrontPorchLight1_Color.sendCommand(20);
+	FrontPorchLight2_Color.sendCommand(20);
+	BackPorchLight1_Color.sendCommand(20);
+	BackPorchLight2_Color.sendCommand(20);
+
+
+	FrontPorchLight1_Temperature.sendCommand(20);
+	FrontPorchLight2_Temperature.sendCommand(20);
+	BackPorchLight1_Temperature.sendCommand(20);
+	BackPorchLight2_Temperature.sendCommand(20);
+end
+
+rule "Porch Lights Evening"
+when
+	Time cron "0 0 16 ? * * "
+then
+	FrontPorchLight1_Color.sendCommand(80);
+	FrontPorchLight2_Color.sendCommand(80);
+	BackPorchLight1_Color.sendCommand(80);
+	BackPorchLight2_Color.sendCommand(80);
+
+
+	FrontPorchLight1_Temperature.sendCommand(80);
+	FrontPorchLight2_Temperature.sendCommand(80);
+	BackPorchLight1_Temperature.sendCommand(80);
+	BackPorchLight2_Temperature.sendCommand(80);
+end

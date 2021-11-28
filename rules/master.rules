@@ -36,6 +36,7 @@ val String MOOD_FESTIVE_STP    = "stpatricks"
 val String MOOD_FESTIVE_JULY4  = "july4"
 val String MOOD_FESTIVE_EASTER = "easter"
 val String MOOD_FESTIVE_HALOWN = "halloween"
+val String MOOD_EMERGENCY      = "emergency"
 
 
 /** Kitchen Scenes */
@@ -229,7 +230,7 @@ then
         logError("gTrackStateReason", "UNABLE TO COMPLY - HEALTH & SAFETY-SET ITEMS CANNOT BE OVERRIDEN MANUALLY");
         isUpdateAutomatic += 1;
 
-        triggeringItem.sendCommand(if(receivedCommand == OFF) {ON} else {OFF});
+        //triggeringItem.sendCommand(if(receivedCommand == OFF) {ON} else {OFF});
 
         createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
     }
@@ -260,7 +261,7 @@ then
             //logError("gTrackStateReason", "Failed to generate reason list: " + t.getMessage());
         }
 
-        vItemReasonList.postUpdate(reasonList)
+        //vItemReasonList.postUpdate(reasonList)
     ])
 end
 
@@ -401,8 +402,6 @@ then
             lastStateDate.put(RgbwBulb8_Color.name, now);   
         }        
 
-        //Choose a random color for the kitchen mood
-        vKitchenMoodColor.sendCommand(new HSBType(new DecimalType(rand.nextInt(360)), new PercentType(30 + rand.nextInt(50)), new PercentType(100)));
     }
     catch (Throwable t) {
         logError("morning_lights", t.getMessage())
@@ -413,6 +412,14 @@ then
     }
 end
 
+
+rule "Choose new kitchen accent every day"
+when
+    Time cron "0 0 0 ? * *"
+then
+    //Choose a random color for the kitchen mood
+    vKitchenMoodColor.postUpdate(new HSBType(new DecimalType(rand.nextInt(360)), new PercentType(30 + rand.nextInt(50)), new PercentType(100)));
+end
 
 
 rule "Kitchen Scene Manager"
@@ -433,20 +440,21 @@ then
     var String oldScene = vKitchenScene.state.toString();
     var String newScene = SCENE_K_DARK;
 
-    if (hour >= 5 && hour < 9) {
-        newScene = SCENE_K_EARLY_MORNING;
+
+    if (hour >= 19 && oldScene != SCENE_K_DARK) {
+        newScene = SCENE_K_EVENING;
     }
-    else if (hour >= 9 && hour < 12) {
-        newScene = SCENE_K_LATE_MORNING;
-    }
-    else if (((hour >= 14 && hour < 17) && luminance < 35) || hour == 17) {
+    else if (hour >= 16) {
         newScene = SCENE_K_COOKING;
     }
-    else if (hour >= 12 && oldScene != SCENE_K_COOKING) {
+    else if (hour >= 12) {
         newScene = SCENE_K_AFTERNOON;
     }
-    else if (hour >= 19 && oldScene != SCENE_K_DARK) {
-        newScene = SCENE_K_EVENING;
+    else if (hour >= 9) {
+        newScene = SCENE_K_LATE_MORNING;
+    }
+    else if (hour >= 5) {
+        newScene = SCENE_K_EARLY_MORNING;
     }
 
     //automationLock.lock()
@@ -468,52 +476,55 @@ then
     }
 end
 
+
 rule "Kitchen Scene Applier"
 when
     Item vKitchenScene changed or
-    Item vKitchenMoodColor changed 
+    Item vKitchenMoodColor changed or
+    Time cron "0 */15 * ? * *"
 then
     var sinkLights = OFF;
-    var HSBType coffeeColor = new HSBType(new DecimalType(0), new PercentType(0), new PercentType(0));
-    var int coffeeLights = 0;
-    var int coffeeTemp = 0;
-    var int barLights = 0;
-    var int diningroomLights = 0;
-    var int chinaLights = 0;
+    var coffeeColor = new HSBType(new DecimalType(0), new PercentType(0), new PercentType(0));
+    var coffeeLights = 0;
+    var counterColor = new HSBType(new DecimalType(0), new PercentType(0), new PercentType(0));
+    var counterLights = 0;
+    var coffeeTemp = 0;
+    var barLights = 0;
+    var diningroomLights = 0;
+    var chinaLights = 0;
 
-    var String reason;
+    logInfo("kitchen_scene_applier", "starting setup of kitchen scene: " + vKitchenScene.state.toString());
 
-    logInfo("kitchen_scene_applier", "starting setup of kitchen scene");
-
-    try {
-        if (null !== lastStateReason.get(vLivingroomScene.name) && REASON_MANUAL !== lastStateReason.get(vLivingroomScene.name)) {
-            reason = lastStateReason.get(vLivingroomScene.name);
-        }
-        else {
-            reason = REASON_TIME;
-        }
+    if (null === vKitchenMoodColor.state) {
+        vKitchenMoodColor.postUpdate(new HSBType(new DecimalType(rand.nextInt(360)), new PercentType(30 + rand.nextInt(50)), new PercentType(100)));
+        Thread::sleep(10);
     }
-    catch(Throwable t) {
-        reason = REASON_TIME;
-    }
+
+    createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
+    isUpdateAutomatic += 1;
+
 
     switch(vKitchenScene.state.toString()){
         case SCENE_K_EARLY_MORNING: {
             coffeeLights     = 100;
             coffeeTemp       = 100;
+            counterColor     = vKitchenMoodColor.state as HSBType;
             }
         case SCENE_K_LATE_MORNING: {
             coffeeLights     = 100;
             coffeeTemp       = 50;
+            counterColor     = vKitchenMoodColor.state as HSBType;
             }
         case SCENE_K_AFTERNOON: {
             coffeeColor      = vKitchenMoodColor.state as HSBType;
+            counterColor     = vKitchenMoodColor.state as HSBType;
             barLights        = 100;
             chinaLights      = 50;
             }
         case SCENE_K_COOKING: {
             sinkLights       = ON;
             coffeeLights     = 100;
+            counterLights    = 100;
             coffeeTemp       = 100;
             barLights        = 100;
             diningroomLights = 50;
@@ -521,6 +532,7 @@ then
             }
         case SCENE_K_DINNER: {
             coffeeColor      = vKitchenMoodColor.state as HSBType;
+            counterColor     = vKitchenMoodColor.state as HSBType;
             barLights        = 100;
             diningroomLights = 100;
             chinaLights      = 100;
@@ -528,7 +540,7 @@ then
         case SCENE_K_EVENING: {
             sinkLights       = ON;
             coffeeColor      = vKitchenMoodColor.state as HSBType;
-            coffeeTemp       = 100;
+            counterColor     = vKitchenMoodColor.state as HSBType;
             barLights        = 100;
             diningroomLights = 50;
             chinaLights      = 100;
@@ -536,59 +548,47 @@ then
     }
 
     try {
-        isUpdateAutomatic += 1;
-        createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
-    }
-    catch (Throwable t) {
-        logError("kitchen_scene_applier", "Failed to set isUpdateAutomatic, this will look like a manual change");
-    }
-
-    try {
-        KitchenSinkLights_Switch.sendCommand(sinkLights);
-        lastStateReason.put(KitchenSinkLights_Switch.name, reason);
-        lastStateDate.put(KitchenSinkLights_Switch.name, now);
+        logInfo("kitchen_scene_applier", "setting sink lights: " + sinkLights);
+        if (isOKToTurnOnBecause.apply(KitchenSinkLights_Switch, REASON_TIME, lastStateReason, lastStateDate)){
+            KitchenSinkLights_Switch.sendCommand(sinkLights);
+            lastStateReason.put(KitchenSinkLights_Switch.name, REASON_TIME);
+            lastStateDate.put(KitchenSinkLights_Switch.name, now);
+        }
     } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set sink lights: " + t.getMessage());}
 
     try {
-        CoffeeLight_Color.sendCommand(coffeeColor as HSBType);
-        lastStateReason.put(CoffeeLight_Color.name, reason);
-        lastStateDate.put(CoffeeLight_Color.name, now);
-    } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set coffee color: " + t.getMessage());}
-
-    try {
-        CoffeeLight_Dimmer.sendCommand(coffeeLights);
-        lastStateReason.put(CoffeeLight_Dimmer.name, reason);
-        lastStateDate.put(CoffeeLight_Dimmer.name, now);
-    } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set coffee dimmer: " + t.getMessage());}
-
-    try {
+        logWarn("kitchen_scene_applier", "setting coffee dimmer / color: " + coffeeLights + " " + coffeeColor);
         CoffeeLight_Temperature2.sendCommand(coffeeTemp);
-        lastStateReason.put(CoffeeLight_Temperature2.name, reason);
-        lastStateDate.put(CoffeeLight_Temperature2.name, now);
-    } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set coffee temp: " + t.getMessage());}
+        CoffeeLight_Dimmer.sendCommand(coffeeLights);
 
+        CoffeeLight_Color.sendCommand(if (coffeeColor.getBrightness() > 0) coffeeColor else OFF );
+    } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set coffee dimmer/color: " + t.getMessage());}
 
     try {
+        logWarn("kitchen_scene_applier", "setting counter dimmer / color: " + counterLights + " " + counterColor);
+        CounterLight_Temperature.sendCommand(coffeeTemp);
+        CounterLight_Dimmer.sendCommand(counterLights);
+
+        CounterLight_Color.sendCommand(if (counterColor.getBrightness() > 0) counterColor else OFF);
+    } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set counter dimmer/color: " + t.getMessage());}
+
+    try {
+        logInfo("kitchen_scene_applier", "setting bar lights: " + barLights);
         BarLights_Dimmer.sendCommand(barLights);
-        lastStateReason.put(BarLights_Dimmer.name, reason);
-        lastStateDate.put(BarLights_Dimmer.name, now);
     } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set bar lights: " + t.getMessage());}
 
     try {
+        logInfo("kitchen_scene_applier", "setting diningroom lights: " + diningroomLights);
         DiningroomLights_Dimmer.sendCommand(diningroomLights);
-        lastStateReason.put(DiningroomLights_Dimmer.name, reason);
-        lastStateDate.put(DiningroomLights_Dimmer.name, now);
     } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set diningroom lights: " + t.getMessage());}
 
     try {
+        logInfo("kitchen_scene_applier", "setting china lights: " + chinaLights);
         ChinaCabinet_Dimmer.sendCommand(chinaLights);
-        lastStateReason.put(ChinaCabinet_Dimmer.name, reason);
-        lastStateDate.put(ChinaCabinet_Dimmer.name, now);
     } catch (Throwable t) {logError("kitchen_scene_applier", "failed to set china cabinet lights: " + t.getMessage());}
 
     logInfo("kitchen_scene_applier", "finishsed setting up kitchen scene");
 end
-
 
 
 
@@ -1096,19 +1096,19 @@ then
             }
             case MOOD_FESTIVE_HALOWN: {
                 bulb1_device = RgbwBulb1_Color
-                bulb1_value = new HSBType(new DecimalType(30), new PercentType(100),new PercentType(100));
+                bulb1_value = new HSBType(new DecimalType(20), new PercentType(100),new PercentType(100));
 
                 bulb2_device = RgbwBulb2_Color
-                bulb2_value = new HSBType(new DecimalType(30), new PercentType(100), new PercentType(100));
+                bulb2_value = new HSBType(new DecimalType(20), new PercentType(100), new PercentType(100));
 
                 bulb3_device = RgbwBulb3_Color
-                bulb3_value = new HSBType(new DecimalType(30), new PercentType(100), new PercentType(100));
+                bulb3_value = new HSBType(new DecimalType(265), new PercentType(100), new PercentType(100));
 
                 bulb4_device = RgbwBulb4_Color
-                bulb4_value = new HSBType(new DecimalType(30), new PercentType(100), new PercentType(100));
+                bulb4_value = new HSBType(new DecimalType(20), new PercentType(100), new PercentType(100));
 
                 bulb5_device = RgbwBulb5_Color
-                bulb5_value = new HSBType(new DecimalType(30), new PercentType(100), new PercentType(100));
+                bulb5_value = new HSBType(new DecimalType(20), new PercentType(100), new PercentType(100));
 
                 bulb6_device = RgbwBulb6_Color
                 bulb6_value = new HSBType(new DecimalType(265), new PercentType(100), new PercentType(40));
@@ -1499,7 +1499,7 @@ then
         lastStateDate.put(BathroomHeater_Switch.name, now);
         BathroomHeater_Switch.sendCommand(ON);
     }
-    else if (humidity < 60  && (fanStateReason == REASON_HEALTH_SAFETY || heaterStateReason == REASON_HEALTH_SAFETY)) {
+    else if (humidity < 70  && (fanStateReason == REASON_HEALTH_SAFETY || heaterStateReason == REASON_HEALTH_SAFETY)) {
         logInfo("bathroom extreme humidity", "Extreme Humidity Cleared, reducing reason to allow manual control");
         isUpdateAutomatic += 1; 
         createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
@@ -1511,7 +1511,7 @@ then
         lastStateDate.put(BathroomHeater_Switch.name, now);
         BathroomHeater_Switch.sendCommand(OFF);
     }
-    else if (humidity > 60) {
+    else if (humidity > 70) {
         isUpdateAutomatic += 1;
         createTimer(now.plusSeconds(1), [ | isUpdateAutomatic -= 1; ]);
 
