@@ -677,11 +677,13 @@ then
             luminance = LivingRoomMultisensor_SensorLuminance.state as Number;
         }
         else {
-            luminance = 50;
+            luminance = 10;
+            logError("ls_scene_mgr", "failed to get luminance, was null")
         }
     }
     catch(Throwable ex) {
         if (null === luminance) {luminance = 50;}
+        logError("lr_scene_mgr", "failed to get luminance: " + t.getMessage())
     }
 
     isUpdateAutomatic += 1;

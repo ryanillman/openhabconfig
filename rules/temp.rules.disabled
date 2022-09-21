@@ -1,0 +1,30 @@
+val String SCENE_MORNING   = "morning"
+val String SCENE_NORMAL    = "normal"
+val String SCENE_TV        = "tv"
+val String SCENE_MOVIE     = "movie"
+val String SCENE_COZY      = "cozy"
+val String SCENE_DARK      = "dark"
+
+
+val String MOOD_MORNING        = "morning"
+val String MOOD_AFTERNOON      = "afternoon"
+val String MOOD_EARLY_EVENING  = "early_evening"
+val String MOOD_MID_EVENING    = "mid_evening"
+val String MOOD_LATE_EVENING   = "late_evening"
+val String MOOD_BEDTIME        = "bedtime"
+val String MOOD_COZY           = "cozy"
+val String MOOD_CHIPPER        = "chipper"
+val String MOOD_FESTIVE_XMAS   = "xmas"
+val String MOOD_FESTIVE_STP    = "stpatricks"
+val String MOOD_FESTIVE_JULY4  = "july4"
+val String MOOD_FESTIVE_EASTER = "easter"
+
+
+/** Kitchen Scenes */
+val String SCENE_K_EARLY_MORNING = "earlymorning"
+val String SCENE_K_LATE_MORNING  = "latemorning"
+val String SCENE_K_AFTERNOON     = "afternoon"
+val String SCENE_K_COOKING       = "cooking"
+val String SCENE_K_DINNER        = "dinner"
+val String SCENE_K_EVENING       = "evening"
+val String SCENE_K_DARK          = "dark"
